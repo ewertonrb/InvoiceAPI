@@ -2,6 +2,7 @@ package com.invoice.invoice_api.service;
 
 import com.invoice.invoice_api.dto.auth.SelectCompanyRequestDTO;
 import com.invoice.invoice_api.dto.auth.SelectCompanyResponseDTO;
+import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.model.AppUser;
 import com.invoice.invoice_api.model.CompanyMembership;
@@ -50,9 +51,9 @@ public class CompanySelectionService {
                                 )
                         );
 
-        if (!Boolean.TRUE.equals(membership.getActive())) {
+        if (membership.getStatus() != MembershipStatus.ACTIVE) {
             throw new AccessDeniedBusinessException(
-                    "Your membership in this company is inactive"
+                    "Your membership in this company is not active"
             );
         }
 

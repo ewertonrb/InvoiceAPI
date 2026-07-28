@@ -15,6 +15,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/users")
 public class AppUserController {
+
     private final AppUserService appUserService;
 
     public AppUserController(AppUserService appUserService) {
@@ -69,11 +70,29 @@ public class AppUserController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{id}/deactivate")
-    public ResponseEntity<Void> deactivate(
+    @PatchMapping("/{id}/block")
+    public ResponseEntity<AppUserResponseDTO> block(
             @PathVariable Long id
     ) {
-        appUserService.deactivate(id);
+        return ResponseEntity.ok(
+                appUserService.block(id)
+        );
+    }
+
+    @PatchMapping("/{id}/unblock")
+    public ResponseEntity<AppUserResponseDTO> unblock(
+            @PathVariable Long id
+    ) {
+        return ResponseEntity.ok(
+                appUserService.unblock(id)
+        );
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(
+            @PathVariable Long id
+    ) {
+        appUserService.delete(id);
 
         return ResponseEntity.noContent().build();
     }

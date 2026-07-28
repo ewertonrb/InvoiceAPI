@@ -12,17 +12,10 @@ public class CompanyMembershipMapper {
     ) {
         return new CompanyMembershipResponseDTO(
                 membership.getId(),
-
                 membership.getAppUser().getId(),
-                membership.getAppUser().getName(),
-                membership.getAppUser().getEmail(),
-
                 membership.getCompany().getId(),
-                membership.getCompany().getName(),
-
                 membership.getRole(),
-                membership.getActive(),
-
+                membership.getStatus(),
                 membership.getCreatedAt(),
                 membership.getUpdatedAt()
         );

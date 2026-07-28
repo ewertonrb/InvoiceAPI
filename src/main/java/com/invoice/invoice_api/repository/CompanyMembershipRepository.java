@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.repository;
 
+import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.model.CompanyMembership;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -17,7 +18,14 @@ public interface CompanyMembershipRepository extends JpaRepository<CompanyMember
 
     List<CompanyMembership> findByCompanyId(Long companyId);
 
-    List<CompanyMembership> findByCompanyIdAndActiveTrue(Long companyId);
+    List<CompanyMembership> findByCompanyIdAndStatus(Long companyId, MembershipStatus status);
 
-    List<CompanyMembership> findByAppUserIdAndActiveTrue(Long appUserId);
+    List<CompanyMembership> findByCompanyIdAndStatusIn(
+            Long companyId,
+            List<MembershipStatus> statuses
+    );
+    List<CompanyMembership> findByAppUserIdAndStatus(
+            Long appUserId,
+            MembershipStatus status
+    );
 }

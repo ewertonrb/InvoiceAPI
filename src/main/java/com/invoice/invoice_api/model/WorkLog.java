@@ -13,7 +13,7 @@ import java.time.LocalDateTime;
         indexes = {
                 @Index(
                         name = "idx_work_log_worker_date",
-                        columnList = "worker_id, work_date"
+                        columnList = "worker_profile_id, work_date"
                 ),
                 @Index(
                         name = "idx_work_log_position_date",

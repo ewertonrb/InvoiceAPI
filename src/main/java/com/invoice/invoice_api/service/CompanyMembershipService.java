@@ -3,6 +3,7 @@ package com.invoice.invoice_api.service;
 import com.invoice.invoice_api.dto.companyMembership.CompanyMembershipRequestDTO;
 import com.invoice.invoice_api.dto.companyMembership.CompanyMembershipResponseDTO;
 import com.invoice.invoice_api.dto.companyMembership.CompanyMembershipRoleRequestDTO;
+import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.CompanyMembershipMapper;
@@ -15,10 +16,12 @@ import com.invoice.invoice_api.repository.CompanyRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
 public class CompanyMembershipService {
+
     private final CompanyMembershipRepository membershipRepository;
     private final AppUserRepository appUserRepository;
     private final CompanyRepository companyRepository;
@@ -32,6 +35,10 @@ public class CompanyMembershipService {
         this.appUserRepository = appUserRepository;
         this.companyRepository = companyRepository;
     }
+
+    // =========================================================
+    // CREATE
+    // =========================================================
 
     @Transactional
     public CompanyMembershipResponseDTO create(
@@ -48,21 +55,9 @@ public class CompanyMembershipService {
                 .orElse(null);
 
         if (existingMembership != null) {
-
-            if (Boolean.TRUE.equals(existingMembership.getActive())) {
-                throw new DuplicateResourceException(
-                        "User is already a member of this company"
-                );
-            }
-
-            existingMembership.setActive(true);
-            existingMembership.setRole(request.role());
-
-            CompanyMembership reactivatedMembership =
-                    membershipRepository.save(existingMembership);
-
-            return CompanyMembershipMapper.toResponseDTO(
-                    reactivatedMembership
+            return reactivateExistingMembership(
+                    existingMembership,
+                    request
             );
         }
 
@@ -71,13 +66,18 @@ public class CompanyMembershipService {
         membership.setAppUser(appUser);
         membership.setCompany(company);
         membership.setRole(request.role());
-        membership.setActive(true);
+        membership.setStatus(MembershipStatus.ACTIVE);
+        membership.setAcceptedAt(LocalDateTime.now());
 
         CompanyMembership savedMembership =
                 membershipRepository.save(membership);
 
         return CompanyMembershipMapper.toResponseDTO(savedMembership);
     }
+
+    // =========================================================
+    // READ
+    // =========================================================
 
     @Transactional(readOnly = true)
     public CompanyMembershipResponseDTO findById(Long id) {
@@ -87,10 +87,13 @@ public class CompanyMembershipService {
     }
 
     @Transactional(readOnly = true)
-    public List<CompanyMembershipResponseDTO> findByUserId(Long appUserId) {
+    public List<CompanyMembershipResponseDTO> findByUserId(
+            Long appUserId
+    ) {
         findAppUserById(appUserId);
 
-        return membershipRepository.findByAppUserId(appUserId)
+        return membershipRepository
+                .findByAppUserId(appUserId)
                 .stream()
                 .map(CompanyMembershipMapper::toResponseDTO)
                 .toList();
@@ -102,7 +105,8 @@ public class CompanyMembershipService {
     ) {
         findCompanyById(companyId);
 
-        return membershipRepository.findByCompanyId(companyId)
+        return membershipRepository
+                .findByCompanyId(companyId)
                 .stream()
                 .map(CompanyMembershipMapper::toResponseDTO)
                 .toList();
@@ -115,11 +119,18 @@ public class CompanyMembershipService {
         findCompanyById(companyId);
 
         return membershipRepository
-                .findByCompanyIdAndActiveTrue(companyId)
+                .findByCompanyIdAndStatus(
+                        companyId,
+                        MembershipStatus.ACTIVE
+                )
                 .stream()
                 .map(CompanyMembershipMapper::toResponseDTO)
                 .toList();
     }
+
+    // =========================================================
+    // UPDATE ROLE
+    // =========================================================
 
     @Transactional
     public CompanyMembershipResponseDTO updateRole(
@@ -137,15 +148,21 @@ public class CompanyMembershipService {
         return CompanyMembershipMapper.toResponseDTO(updatedMembership);
     }
 
+    // =========================================================
+    // STATUS
+    // =========================================================
+
     @Transactional
     public void deactivate(Long id) {
         CompanyMembership membership = findMembershipById(id);
 
-        if (!Boolean.TRUE.equals(membership.getActive())) {
+        if (membership.getStatus() == MembershipStatus.SUSPENDED) {
             return;
         }
 
-        membership.setActive(false);
+        membership.setStatus(MembershipStatus.SUSPENDED);
+        membership.setSuspendedAt(LocalDateTime.now());
+
         membershipRepository.save(membership);
     }
 
@@ -153,7 +170,12 @@ public class CompanyMembershipService {
     public CompanyMembershipResponseDTO reactivate(Long id) {
         CompanyMembership membership = findMembershipById(id);
 
-        membership.setActive(true);
+        if (membership.getStatus() == MembershipStatus.ACTIVE) {
+            return CompanyMembershipMapper.toResponseDTO(membership);
+        }
+
+        membership.setStatus(MembershipStatus.ACTIVE);
+        membership.setSuspendedAt(null);
 
         CompanyMembership reactivatedMembership =
                 membershipRepository.save(membership);
@@ -163,24 +185,59 @@ public class CompanyMembershipService {
         );
     }
 
+    // =========================================================
+    // PRIVATE HELPERS
+    // =========================================================
+
+    private CompanyMembershipResponseDTO reactivateExistingMembership(
+            CompanyMembership existingMembership,
+            CompanyMembershipRequestDTO request
+    ) {
+        if (existingMembership.getStatus() == MembershipStatus.ACTIVE) {
+            throw new DuplicateResourceException(
+                    "User is already a member of this company"
+            );
+        }
+
+        existingMembership.setRole(request.role());
+        existingMembership.setStatus(MembershipStatus.ACTIVE);
+        existingMembership.setAcceptedAt(LocalDateTime.now());
+
+        existingMembership.setSuspendedAt(null);
+        existingMembership.setRejectedAt(null);
+
+        CompanyMembership reactivatedMembership =
+                membershipRepository.save(existingMembership);
+
+        return CompanyMembershipMapper.toResponseDTO(
+                reactivatedMembership
+        );
+    }
+
     private CompanyMembership findMembershipById(Long id) {
         return membershipRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Company membership not found with ID: " + id
-                ));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Company membership not found with ID: " + id
+                        )
+                );
     }
 
     private AppUser findAppUserById(Long id) {
         return appUserRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "App user not found with ID: " + id
-                ));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "App user not found with ID: " + id
+                        )
+                );
     }
 
     private Company findCompanyById(Long id) {
         return companyRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "Company not found with ID: " + id
-                ));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Company not found with ID: " + id
+                        )
+                );
     }
 }

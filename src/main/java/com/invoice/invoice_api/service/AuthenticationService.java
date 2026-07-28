@@ -2,6 +2,7 @@ package com.invoice.invoice_api.service;
 
 import com.invoice.invoice_api.dto.login.LoginRequestDTO;
 import com.invoice.invoice_api.dto.login.LoginResponseDTO;
+import com.invoice.invoice_api.enums.UserStatus;
 import com.invoice.invoice_api.exception.InvalidCredentialsException;
 import com.invoice.invoice_api.model.AppUser;
 import com.invoice.invoice_api.repository.AppUserRepository;
@@ -34,7 +35,7 @@ public class AuthenticationService {
                 .findByEmailIgnoreCase(normalizedEmail)
                 .orElseThrow(this::invalidCredentials);
 
-        if (!Boolean.TRUE.equals(appUser.getActive())) {
+        if (appUser.getStatus() != UserStatus.ACTIVE) {
             throw invalidCredentials();
         }
 

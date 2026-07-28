@@ -4,7 +4,9 @@ import com.invoice.invoice_api.dto.appUser.AppUserPasswordRequestDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserRequestDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserResponseDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserUpdateRequestDTO;
+import com.invoice.invoice_api.enums.UserStatus;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
+import com.invoice.invoice_api.exception.InvalidOperationException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.AppUserMapper;
 import com.invoice.invoice_api.model.AppUser;
@@ -14,9 +16,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class AppUserService {
+
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
 
@@ -30,6 +34,7 @@ public class AppUserService {
 
     @Transactional
     public AppUserResponseDTO create(AppUserRequestDTO request) {
+
         String normalizedEmail = normalizeEmail(request.email());
 
         if (appUserRepository.existsByEmailIgnoreCase(normalizedEmail)) {
@@ -42,28 +47,35 @@ public class AppUserService {
         AppUser appUser = new AppUser();
 
         appUser.setName(request.name().trim());
+        appUser.setSurname(request.surname().trim());
         appUser.setEmail(normalizedEmail);
         appUser.setPassword(
                 passwordEncoder.encode(request.password())
         );
-        appUser.setActive(true);
+        appUser.setStatus(UserStatus.ACTIVE);
 
-        AppUser savedAppUser = appUserRepository.save(appUser);
+        AppUser savedAppUser =
+                appUserRepository.save(appUser);
 
         return AppUserMapper.toResponseDTO(savedAppUser);
     }
 
     @Transactional(readOnly = true)
     public AppUserResponseDTO findById(Long id) {
-        return AppUserMapper.toResponseDTO(
-                findEntityById(id)
-        );
+
+        AppUser appUser = findNonDeletedEntityById(id);
+
+        return AppUserMapper.toResponseDTO(appUser);
     }
 
     @Transactional(readOnly = true)
     public List<AppUserResponseDTO> findAll() {
+
         return appUserRepository.findAll()
                 .stream()
+                .filter(appUser ->
+                        appUser.getStatus() != UserStatus.DELETED
+                )
                 .map(AppUserMapper::toResponseDTO)
                 .toList();
     }
@@ -73,9 +85,10 @@ public class AppUserService {
             Long id,
             AppUserUpdateRequestDTO request
     ) {
-        AppUser appUser = findEntityById(id);
+        AppUser appUser = findNonDeletedEntityById(id);
 
-        String normalizedEmail = normalizeEmail(request.email());
+        String normalizedEmail =
+                normalizeEmail(request.email());
 
         appUserRepository
                 .findByEmailIgnoreCase(normalizedEmail)
@@ -90,6 +103,7 @@ public class AppUserService {
                 });
 
         appUser.setName(request.name().trim());
+        appUser.setSurname(request.surname().trim());
         appUser.setEmail(normalizedEmail);
 
         AppUser updatedAppUser =
@@ -103,7 +117,7 @@ public class AppUserService {
             Long id,
             AppUserPasswordRequestDTO request
     ) {
-        AppUser appUser = findEntityById(id);
+        AppUser appUser = findNonDeletedEntityById(id);
 
         appUser.setPassword(
                 passwordEncoder.encode(request.password())
@@ -113,22 +127,101 @@ public class AppUserService {
     }
 
     @Transactional
-    public void deactivate(Long id) {
-        AppUser appUser = findEntityById(id);
+    public AppUserResponseDTO block(Long id) {
 
-        if (!Boolean.TRUE.equals(appUser.getActive())) {
+        AppUser appUser = findEntityByIdIncludingDeleted(id);
+
+        if (appUser.getStatus() == UserStatus.DELETED) {
+            throw new InvalidOperationException(
+                    "A deleted user cannot be blocked."
+            );
+        }
+
+        if (appUser.getStatus() == UserStatus.BLOCKED) {
+            throw new InvalidOperationException(
+                    "User is already blocked."
+            );
+        }
+
+        appUser.setStatus(UserStatus.BLOCKED);
+
+        AppUser blockedAppUser =
+                appUserRepository.save(appUser);
+
+        return AppUserMapper.toResponseDTO(blockedAppUser);
+    }
+
+    @Transactional
+    public AppUserResponseDTO unblock(Long id) {
+
+        AppUser appUser = findEntityByIdIncludingDeleted(id);
+
+        if (appUser.getStatus() == UserStatus.DELETED) {
+            throw new InvalidOperationException(
+                    "A deleted user cannot be unblocked. "
+                            + "Use the reactivate operation instead."
+            );
+        }
+
+        if (appUser.getStatus() == UserStatus.ACTIVE) {
+            throw new InvalidOperationException(
+                    "User is already active."
+            );
+        }
+
+        if (appUser.getStatus() != UserStatus.BLOCKED) {
+            throw new InvalidOperationException(
+                    "Only blocked users can be unblocked."
+            );
+        }
+
+        appUser.setStatus(UserStatus.ACTIVE);
+
+        AppUser unblockedAppUser =
+                appUserRepository.save(appUser);
+
+        return AppUserMapper.toResponseDTO(unblockedAppUser);
+    }
+
+    @Transactional
+    public void delete(Long id) {
+
+        AppUser appUser = findEntityByIdIncludingDeleted(id);
+
+        if (appUser.getStatus() == UserStatus.DELETED) {
             return;
         }
 
-        appUser.setActive(false);
+        appUser.setStatus(UserStatus.DELETED);
+
         appUserRepository.save(appUser);
     }
 
     @Transactional
     public AppUserResponseDTO reactivate(Long id) {
-        AppUser appUser = findEntityById(id);
 
-        appUser.setActive(true);
+        AppUser appUser = findEntityByIdIncludingDeleted(id);
+
+        if (appUser.getStatus() == UserStatus.ACTIVE) {
+            throw new InvalidOperationException(
+                    "User is already active."
+            );
+        }
+
+        if (appUser.getStatus() == UserStatus.BLOCKED) {
+            throw new InvalidOperationException(
+                    "A blocked user must be unblocked, "
+                            + "not reactivated."
+            );
+        }
+
+        if (appUser.getStatus() != UserStatus.DELETED) {
+            throw new InvalidOperationException(
+                    "Only deleted users can be reactivated."
+            );
+        }
+
+        appUser.setStatus(UserStatus.ACTIVE);
 
         AppUser reactivatedAppUser =
                 appUserRepository.save(appUser);
@@ -138,14 +231,35 @@ public class AppUserService {
         );
     }
 
-    private AppUser findEntityById(Long id) {
+    private AppUser findNonDeletedEntityById(Long id) {
+
+        AppUser appUser =
+                findEntityByIdIncludingDeleted(id);
+
+        if (appUser.getStatus() == UserStatus.DELETED) {
+            throw new ResourceNotFoundException(
+                    "App user not found with ID: " + id
+            );
+        }
+
+        return appUser;
+    }
+
+    private AppUser findEntityByIdIncludingDeleted(Long id) {
+
         return appUserRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "App user not found with ID: " + id
-                ));
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "App user not found with ID: "
+                                        + id
+                        )
+                );
     }
 
     private String normalizeEmail(String email) {
-        return email.trim().toLowerCase();
+
+        return email
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 }

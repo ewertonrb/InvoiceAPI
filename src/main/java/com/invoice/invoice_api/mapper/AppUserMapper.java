@@ -13,7 +13,7 @@ public class AppUserMapper {
                 appUser.getName(),
                 appUser.getSurname(),
                 appUser.getEmail(),
-                appUser.getActive(),
+                appUser.getStatus(),
                 appUser.getCreatedAt(),
                 appUser.getUpdatedAt()
         );

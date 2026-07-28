@@ -2,6 +2,7 @@ package com.invoice.invoice_api.controller;
 
 import com.invoice.invoice_api.dto.workLog.WorkLogRequestDTO;
 import com.invoice.invoice_api.dto.workLog.WorkLogResponseDTO;
+import com.invoice.invoice_api.dto.workLogStatus.RejectWorkLogRequestDTO;
 import com.invoice.invoice_api.service.WorkLogService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -141,6 +142,45 @@ public class WorkLogController {
     ) {
         WorkLogResponseDTO response =
                 workLogService.approve(id);
+
+        return ResponseEntity.ok(response);
+    }
+    @PatchMapping("/{id}/reject")
+    public ResponseEntity<WorkLogResponseDTO> reject(
+
+            @PathVariable Long id,
+
+            @Valid
+            @RequestBody
+            RejectWorkLogRequestDTO request
+
+    ) {
+
+        WorkLogResponseDTO response =
+                workLogService.reject(
+                        id,
+                        request.rejectionReason()
+                );
+
+        return ResponseEntity.ok(response);
+    }
+    @PatchMapping("/{id}/cancel")
+    public ResponseEntity<WorkLogResponseDTO> cancel(
+            @PathVariable Long id
+    ) {
+
+        WorkLogResponseDTO response =
+                workLogService.cancel(id);
+
+        return ResponseEntity.ok(response);
+    }
+    @PatchMapping("/{id}/reopen")
+    public ResponseEntity<WorkLogResponseDTO> reopen(
+            @PathVariable Long id
+    ) {
+
+        WorkLogResponseDTO response =
+                workLogService.reopen(id);
 
         return ResponseEntity.ok(response);
     }

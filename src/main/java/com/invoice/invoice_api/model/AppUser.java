@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.model;
 
+import com.invoice.invoice_api.enums.UserStatus;
 import jakarta.persistence.*;
 
 import java.time.LocalDateTime;
@@ -37,13 +38,11 @@ public class AppUser {
     )
     private String email;
 
-    @Column(
-            nullable = false
-    )
+    @Column
     private String password;
 
-    @Column(nullable = false)
-    private Boolean active = true;
+    @Column
+    private LocalDateTime lastLoginAt;
 
     @Column(
             nullable = false,
@@ -53,6 +52,10 @@ public class AppUser {
 
     @Column(nullable = false)
     private LocalDateTime updatedAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private UserStatus status;
 
     public AppUser() {
     }
@@ -78,8 +81,8 @@ public class AppUser {
         createdAt = now;
         updatedAt = now;
 
-        if (active == null) {
-            active = true;
+        if (status == null) {
+            status = UserStatus.ACTIVE;
         }
     }
 
@@ -104,6 +107,14 @@ public class AppUser {
         this.name = name;
     }
 
+    public String getSurname() {
+        return surname;
+    }
+
+    public void setSurname(String surname) {
+        this.surname = surname;
+    }
+
     public String getEmail() {
         return email;
     }
@@ -120,12 +131,12 @@ public class AppUser {
         this.password = password;
     }
 
-    public Boolean getActive() {
-        return active;
+    public LocalDateTime getLastLoginAt() {
+        return lastLoginAt;
     }
 
-    public void setActive(Boolean active) {
-        this.active = active;
+    public void setLastLoginAt(LocalDateTime lastLoginAt) {
+        this.lastLoginAt = lastLoginAt;
     }
 
     public LocalDateTime getCreatedAt() {
@@ -144,11 +155,11 @@ public class AppUser {
         this.updatedAt = updatedAt;
     }
 
-    public String getSurname() {
-        return surname;
+    public UserStatus getStatus() {
+        return status;
     }
 
-    public void setSurname(String surname) {
-        this.surname = surname;
+    public void setStatus(UserStatus status) {
+        this.status = status;
     }
 }

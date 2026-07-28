@@ -2,6 +2,7 @@ package com.invoice.invoice_api.service;
 
 import com.invoice.invoice_api.dto.auth.CurrentUserCompanyResponseDTO;
 import com.invoice.invoice_api.dto.auth.CurrentUserResponseDTO;
+import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.model.AppUser;
 import com.invoice.invoice_api.repository.CompanyMembershipRepository;
 import com.invoice.invoice_api.security.AuthenticatedUserService;
@@ -34,18 +35,23 @@ public class CurrentUserService {
         return new CurrentUserResponseDTO(
                 appUser.getId(),
                 appUser.getName(),
+                appUser.getSurname(),
                 appUser.getEmail(),
-                appUser.getActive()
+                appUser.getStatus()
         );
     }
 
     @Transactional(readOnly = true)
     public List<CurrentUserCompanyResponseDTO> findCurrentUserCompanies() {
+
         Long appUserId =
                 authenticatedUserService.getCurrentUserId();
 
         return companyMembershipRepository
-                .findByAppUserIdAndActiveTrue(appUserId)
+                .findByAppUserIdAndStatus(
+                        appUserId,
+                        MembershipStatus.ACTIVE
+                )
                 .stream()
                 .map(membership ->
                         new CurrentUserCompanyResponseDTO(

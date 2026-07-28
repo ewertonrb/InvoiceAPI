@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.security;
 
+import com.invoice.invoice_api.enums.UserStatus;
 import com.invoice.invoice_api.model.AppUser;
 import com.invoice.invoice_api.repository.AppUserRepository;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -37,7 +38,7 @@ public class AppUserDetailsService implements UserDetailsService {
                 .username(appUser.getEmail())
                 .password(appUser.getPassword())
                 .authorities(List.of())
-                .disabled(!Boolean.TRUE.equals(appUser.getActive()))
+                .disabled(appUser.getStatus() != UserStatus.ACTIVE)
                 .build();
     }
 }
