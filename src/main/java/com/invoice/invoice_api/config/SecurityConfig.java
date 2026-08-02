@@ -43,12 +43,15 @@ public class SecurityConfig {
                                 "/auth/login",
                                 "/users",
                                 "/public/invitations/accept",
-                                "/public/invitations/decline"
+                                "/public/invitations/decline",
+                                "/public/join-links/accept"
                         ).permitAll()
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/public/invitations",
-                                "/public/invitations/**"
+                                "/public/invitations/**",
+                                "/public/join-links",
+                                "/public/join-links/**"
                         ).permitAll()
                         .anyRequest().authenticated()
                 )
