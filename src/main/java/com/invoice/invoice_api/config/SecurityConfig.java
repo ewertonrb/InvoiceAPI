@@ -40,14 +40,16 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.POST,
-                                "/auth/login"
+                                "/auth/login",
+                                "/users",
+                                "/public/invitations/accept",
+                                "/public/invitations/decline"
                         ).permitAll()
-
                         .requestMatchers(
-                                HttpMethod.POST,
-                                "/app-users"
+                                HttpMethod.GET,
+                                "/public/invitations",
+                                "/public/invitations/**"
                         ).permitAll()
-
                         .anyRequest().authenticated()
                 )
 

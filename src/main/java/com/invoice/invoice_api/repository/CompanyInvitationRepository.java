@@ -35,4 +35,15 @@ public interface CompanyInvitationRepository
             Long companyId,
             InvitationStatus status
     );
+    List<CompanyInvitation>
+    findByCompanyIdOrderByCreatedAtDesc(
+            Long companyId
+    );
+
+    List<CompanyInvitation>
+    findByCompanyIdAndStatusOrderByCreatedAtDesc(
+            Long companyId,
+            InvitationStatus status
+    );
+
 }

@@ -100,6 +100,9 @@ public class CompanyInvitation {
     @Column(nullable = false)
     private LocalDateTime expiresAt;
 
+    @Column(name = "declined_at")
+    private LocalDateTime declinedAt;
+
     private LocalDateTime acceptedAt;
 
     private LocalDateTime cancelledAt;
@@ -216,6 +219,10 @@ public class CompanyInvitation {
     public void setExpiresAt(LocalDateTime expiresAt) {
         this.expiresAt = expiresAt;
     }
+
+    public LocalDateTime getDeclinedAt() {return declinedAt;}
+
+    public void setDeclinedAt(LocalDateTime declinedAt) {this.declinedAt = declinedAt;}
 
     public LocalDateTime getAcceptedAt() {
         return acceptedAt;
