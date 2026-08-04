@@ -31,6 +31,8 @@ public record WorkLogResponseDTO(
 
         LocalDate workDate,
 
+        WorkLogTimeResponseDTO workTime,
+
         BigDecimal regularHours,
 
         BigDecimal overtime15Hours,
@@ -43,11 +45,13 @@ public record WorkLogResponseDTO(
 
         BigDecimal publicHolidayHours,
 
-        BigDecimal travelHours,
+        WorkLogTravelResponseDTO travel,
 
-        BigDecimal kilometres,
+        WorkLogFinancialSnapshotResponseDTO financialSnapshot,
 
-        Integer lafhaNights,
+        String notes,
+
+        String managerNotes,
 
         WorkLogStatus status,
 
@@ -57,7 +61,12 @@ public record WorkLogResponseDTO(
 
         LocalDateTime rejectedAt,
 
-        String rejectionReason
+        String rejectionReason,
+
+        LocalDateTime createdAt,
+
+        LocalDateTime updatedAt
+
 
 ) {
 }

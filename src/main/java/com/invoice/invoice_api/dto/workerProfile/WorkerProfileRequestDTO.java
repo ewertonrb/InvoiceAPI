@@ -9,9 +9,6 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
 public record WorkerProfileRequestDTO(
-        @NotNull(message = "App user ID is required")
-        Long appUserId,
-
         @Pattern(
                 regexp = "^(?:\\d[\\s-]?){11}$",
                 message = "ABN must contain 11 digits"
@@ -20,15 +17,11 @@ public record WorkerProfileRequestDTO(
 
         Boolean gstRegistered,
 
-        @Size(max = 30, message = "Phone must contain at most 30 characters")
-        String phone,
-
-        @DecimalMin(
-                value = "0.00",
-                inclusive = true,
-                message = "Default hourly rate cannot be negative"
+        @Size(
+                max = 30,
+                message = "Phone must contain at most 30 characters"
         )
-        BigDecimal defaultHourlyRate,
+        String phone,
 
         @Valid
         BankDetailsRequestDTO bankDetails,
@@ -36,7 +29,10 @@ public record WorkerProfileRequestDTO(
         @Valid
         SuperDetailsRequestDTO superDetails,
 
-        @Size(max = 1000, message = "Notes must contain at most 1000 characters")
+        @Size(
+                max = 1000,
+                message = "Notes must contain at most 1000 characters"
+        )
         String notes
 
 ) {

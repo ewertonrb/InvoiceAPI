@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.dto.workLog;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -19,6 +20,9 @@ public record WorkLogRequestDTO(
 
         @NotNull(message = "Work date is required")
         LocalDate workDate,
+
+        @Valid
+        WorkLogTimeRequestDTO workTime,
 
         @NotNull(message = "Regular hours are required")
         @DecimalMin(
@@ -71,25 +75,8 @@ public record WorkLogRequestDTO(
         )
         BigDecimal publicHolidayHours,
 
-        @NotNull(message = "Travel hours are required")
-        @DecimalMin(
-                value = "0.00",
-                message = "Travel hours cannot be negative"
-        )
-        BigDecimal travelHours,
-
-        @NotNull(message = "Kilometres are required")
-        @DecimalMin(
-                value = "0.00",
-                message = "Kilometres cannot be negative"
-        )
-        BigDecimal kilometres,
-
-        @NotNull(message = "LAFHA nights are required")
-        @PositiveOrZero(
-                message = "LAFHA nights cannot be negative"
-        )
-        Integer lafhaNights,
+        @Valid
+        WorkLogTravelRequestDTO travel,
 
         @Size(
                 max = 500,

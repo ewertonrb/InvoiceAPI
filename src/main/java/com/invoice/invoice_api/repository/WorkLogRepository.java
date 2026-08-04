@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.repository;
 
+import com.invoice.invoice_api.enums.WorkLogStatus;
 import com.invoice.invoice_api.model.WorkLog;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -20,9 +21,22 @@ public interface WorkLogRepository extends JpaRepository<WorkLog, Long> {
     );
 
     List<WorkLog>
+    findAllByProjectPositionProjectCompanyIdAndStatusOrderByWorkDateDesc(
+            Long companyId,
+            WorkLogStatus status
+    );
+
+    List<WorkLog>
     findAllByWorkerProfileIdAndProjectPositionProjectCompanyIdOrderByWorkDateDesc(
             Long workerProfileId,
             Long companyId
+    );
+
+    List<WorkLog>
+    findAllByWorkerProfileIdAndProjectPositionProjectCompanyIdAndStatusOrderByWorkDateDesc(
+            Long workerProfileId,
+            Long companyId,
+            WorkLogStatus status
     );
 
     List<WorkLog>
@@ -32,10 +46,33 @@ public interface WorkLogRepository extends JpaRepository<WorkLog, Long> {
     );
 
     List<WorkLog>
+    findAllByProjectPositionProjectIdAndProjectPositionProjectCompanyIdAndStatusOrderByWorkDateDesc(
+            Long projectId,
+            Long companyId,
+            WorkLogStatus status
+    );
+
+    List<WorkLog>
     findAllByWorkerProfileIdAndWorkDateBetweenAndProjectPositionProjectCompanyIdOrderByWorkDateAsc(
             Long workerProfileId,
             LocalDate startDate,
             LocalDate endDate,
             Long companyId
+    );
+
+    List<WorkLog>
+    findAllByWorkerProfileIdAndWorkDateBetweenAndProjectPositionProjectCompanyIdAndStatusOrderByWorkDateAsc(
+            Long workerProfileId,
+            LocalDate startDate,
+            LocalDate endDate,
+            Long companyId,
+            WorkLogStatus status
+    );
+
+    boolean existsByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNot(
+            Long workerProfileId,
+            Long projectPositionId,
+            LocalDate workDate,
+            WorkLogStatus excludedStatus
     );
 }

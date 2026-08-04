@@ -21,65 +21,23 @@ public class WorkerProfileController {
         this.workerProfileService = workerProfileService;
     }
 
-    @PostMapping
-    public ResponseEntity<WorkerProfileResponseDTO> create(
-            @Valid @RequestBody WorkerProfileRequestDTO request
-    ) {
-        return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(workerProfileService.create(request));
-    }
-
-    @GetMapping("/{id}")
-    public ResponseEntity<WorkerProfileResponseDTO> findById(
-            @PathVariable Long id
-    ) {
+    @GetMapping("/me")
+    public ResponseEntity<WorkerProfileResponseDTO> findCurrentProfile() {
         return ResponseEntity.ok(
-                workerProfileService.findById(id)
+                workerProfileService.findCurrentProfile()
         );
     }
 
-    @GetMapping("/app-users/{appUserId}")
-    public ResponseEntity<WorkerProfileResponseDTO> findByAppUserId(
-            @PathVariable Long appUserId
+    @PutMapping("/me")
+    public ResponseEntity<WorkerProfileResponseDTO> updateCurrentProfile(
+            @Valid
+            @RequestBody
+            WorkerProfileRequestDTO request
     ) {
         return ResponseEntity.ok(
-                workerProfileService.findByAppUserId(appUserId)
-        );
-    }
-
-    @GetMapping
-    public ResponseEntity<List<WorkerProfileResponseDTO>> findAll() {
-        return ResponseEntity.ok(
-                workerProfileService.findAll()
-        );
-    }
-
-    @PutMapping("/{id}")
-    public ResponseEntity<WorkerProfileResponseDTO> update(
-            @PathVariable Long id,
-            @Valid @RequestBody WorkerProfileRequestDTO request
-    ) {
-        return ResponseEntity.ok(
-                workerProfileService.update(id, request)
-        );
-    }
-
-    @PatchMapping("/{id}/deactivate")
-    public ResponseEntity<Void> deactivate(
-            @PathVariable Long id
-    ) {
-        workerProfileService.deactivate(id);
-
-        return ResponseEntity.noContent().build();
-    }
-
-    @PatchMapping("/{id}/reactivate")
-    public ResponseEntity<WorkerProfileResponseDTO> reactivate(
-            @PathVariable Long id
-    ) {
-        return ResponseEntity.ok(
-                workerProfileService.reactivate(id)
+                workerProfileService.updateCurrentProfile(
+                        request
+                )
         );
     }
 }

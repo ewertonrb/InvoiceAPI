@@ -1,18 +1,26 @@
 package com.invoice.invoice_api.service;
 
-import com.invoice.invoice_api.dto.workerProfile.BankDetailsRequestDTO;
-import com.invoice.invoice_api.dto.workerProfile.SuperDetailsRequestDTO;
+
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileRequestDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileResponseDTO;
-import com.invoice.invoice_api.exception.DuplicateResourceException;
+import com.invoice.invoice_api.dto.workerProfile.WorkerProfileSummaryDTO;
+import com.invoice.invoice_api.enums.CompanyRole;
+import com.invoice.invoice_api.enums.MembershipStatus;
+import com.invoice.invoice_api.enums.WorkerProfileStatus;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
+import com.invoice.invoice_api.exception.InvalidOperationException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
+import com.invoice.invoice_api.mapper.BankDetailsMapper;
+import com.invoice.invoice_api.mapper.SuperDetailsMapper;
 import com.invoice.invoice_api.mapper.WorkerProfileMapper;
 import com.invoice.invoice_api.model.AppUser;
+import com.invoice.invoice_api.model.CompanyMembership;
 import com.invoice.invoice_api.model.WorkerProfile;
 import com.invoice.invoice_api.model.embeddable.BankDetails;
 import com.invoice.invoice_api.model.embeddable.SuperDetails;
-import com.invoice.invoice_api.repository.AppUserRepository;
+import com.invoice.invoice_api.repository.CompanyMembershipRepository;
 import com.invoice.invoice_api.repository.WorkerProfileRepository;
+import com.invoice.invoice_api.security.AuthenticatedUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,270 +28,343 @@ import java.util.List;
 
 @Service
 public class WorkerProfileService {
+
     private final WorkerProfileRepository workerProfileRepository;
-    private final AppUserRepository appUserRepository;
+    private final CompanyMembershipRepository membershipRepository;
+    private final AuthenticatedUserService authenticatedUserService;
+    private final WorkerProfileValidator workerProfileValidator;
 
     public WorkerProfileService(
             WorkerProfileRepository workerProfileRepository,
-            AppUserRepository appUserRepository
+            CompanyMembershipRepository membershipRepository,
+            AuthenticatedUserService authenticatedUserService,
+            WorkerProfileValidator workerProfileValidator
     ) {
         this.workerProfileRepository = workerProfileRepository;
-        this.appUserRepository = appUserRepository;
+        this.membershipRepository = membershipRepository;
+        this.authenticatedUserService = authenticatedUserService;
+        this.workerProfileValidator = workerProfileValidator;
+    }
+
+    /*
+     * ============================================================
+     * CURRENT USER
+     * ============================================================
+     */
+
+    @Transactional(readOnly = true)
+    public WorkerProfileResponseDTO findCurrentProfile() {
+
+        WorkerProfile workerProfile =
+                findCurrentWorkerProfileEntity();
+
+        return WorkerProfileMapper.toResponseDTO(
+                workerProfile
+        );
     }
 
     @Transactional
-    public WorkerProfileResponseDTO create(
+    public WorkerProfileResponseDTO updateCurrentProfile(
             WorkerProfileRequestDTO request
     ) {
-        if (workerProfileRepository.existsByAppUserId(
-                request.appUserId()
-        )) {
-            throw new DuplicateResourceException(
-                    "This app user already has a worker profile"
-            );
-        }
+        WorkerProfile workerProfile =
+                findCurrentWorkerProfileEntity();
 
-        String normalizedAbn = normalizeAbn(request.abn());
+        workerProfileValidator.validateCanBeUpdated(
+                workerProfile
+        );
 
-        validateUniqueAbn(normalizedAbn, null);
+        String normalizedAbn =
+                workerProfileValidator
+                        .normalizeAndValidateAbn(
+                                request.abn(),
+                                workerProfile.getId()
+                        );
 
-        AppUser appUser = findAppUserById(request.appUserId());
+        BankDetails bankDetails =
+                BankDetailsMapper.toEntity(
+                        request.bankDetails()
+                );
 
-        WorkerProfile workerProfile = new WorkerProfile();
+        SuperDetails superDetails =
+                SuperDetailsMapper.toEntity(
+                        request.superDetails()
+                );
 
-        workerProfile.setAppUser(appUser);
-        applyRequest(workerProfile, request, normalizedAbn);
-        workerProfile.setActive(true);
+        WorkerProfileRules.applyProfileInformation(
+                workerProfile,
+                normalizedAbn,
+                request.gstRegistered(),
+                request.phone(),
+                request.notes(),
+                bankDetails,
+                superDetails
+        );
 
-        WorkerProfile savedProfile =
-                workerProfileRepository.save(workerProfile);
+        WorkerProfile savedWorkerProfile =
+                workerProfileRepository.save(
+                        workerProfile
+                );
 
-        return WorkerProfileMapper.toResponseDTO(savedProfile);
+        return WorkerProfileMapper.toResponseDTO(
+                savedWorkerProfile
+        );
     }
 
+    /*
+     * ============================================================
+     * ADMIN QUERIES
+     * ============================================================
+     */
+
     @Transactional(readOnly = true)
-    public WorkerProfileResponseDTO findById(Long id) {
+    public WorkerProfileResponseDTO findById(
+            Long companyId,
+            Long workerProfileId
+    ) {
+        validateCurrentUserCanManageWorkers(
+                companyId
+        );
+
+        WorkerProfile workerProfile =
+                findEntityById(workerProfileId);
+
+        validateWorkerBelongsToCompany(
+                workerProfile,
+                companyId
+        );
+
         return WorkerProfileMapper.toResponseDTO(
-                findEntityById(id)
+                workerProfile
         );
     }
 
     @Transactional(readOnly = true)
-    public WorkerProfileResponseDTO findByAppUserId(
-            Long appUserId
+    public List<WorkerProfileSummaryDTO> findActiveWorkersByCompany(
+            Long companyId
     ) {
-        WorkerProfile workerProfile =
-                workerProfileRepository
-                        .findByAppUserId(appUserId)
-                        .orElseThrow(() ->
-                                new ResourceNotFoundException(
-                                        "Worker profile not found for app user ID: "
-                                                + appUserId
-                                )
-                        );
+        validateCurrentUserCanManageWorkers(
+                companyId
+        );
 
-        return WorkerProfileMapper.toResponseDTO(workerProfile);
-    }
-
-    @Transactional(readOnly = true)
-    public List<WorkerProfileResponseDTO> findAll() {
-        return workerProfileRepository.findAll()
+        return workerProfileRepository
+                .findActiveWorkersByCompanyId(companyId)
                 .stream()
-                .map(WorkerProfileMapper::toResponseDTO)
+                .map(WorkerProfileMapper::toSummaryDTO)
                 .toList();
     }
 
+    /*
+     * ============================================================
+     * SUSPEND
+     * ============================================================
+     */
+
     @Transactional
-    public WorkerProfileResponseDTO update(
-            Long id,
-            WorkerProfileRequestDTO request
+    public WorkerProfileResponseDTO suspend(
+            Long companyId,
+            Long workerProfileId
     ) {
-        WorkerProfile workerProfile = findEntityById(id);
+        validateCurrentUserCanManageWorkers(
+                companyId
+        );
 
-        if (!workerProfile.getAppUser()
-                .getId()
-                .equals(request.appUserId())) {
+        WorkerProfile workerProfile =
+                findEntityById(workerProfileId);
 
-            throw new IllegalArgumentException(
-                    "The app user associated with a worker profile cannot be changed"
+        validateWorkerBelongsToCompany(
+                workerProfile,
+                companyId
+        );
+
+        if (
+                workerProfile.getStatus()
+                        == WorkerProfileStatus.SUSPENDED
+        ) {
+            throw new InvalidOperationException(
+                    "Worker profile is already suspended."
             );
         }
 
-        String normalizedAbn = normalizeAbn(request.abn());
+        workerProfile.setStatus(
+                WorkerProfileStatus.SUSPENDED
+        );
 
-        validateUniqueAbn(normalizedAbn, id);
-
-        applyRequest(workerProfile, request, normalizedAbn);
-
-        WorkerProfile updatedProfile =
-                workerProfileRepository.save(workerProfile);
-
-        return WorkerProfileMapper.toResponseDTO(updatedProfile);
-    }
-
-    @Transactional
-    public void deactivate(Long id) {
-        WorkerProfile workerProfile = findEntityById(id);
-
-        workerProfile.setActive(false);
-
-        workerProfileRepository.save(workerProfile);
-    }
-
-    @Transactional
-    public WorkerProfileResponseDTO reactivate(Long id) {
-        WorkerProfile workerProfile = findEntityById(id);
-
-        workerProfile.setActive(true);
+        WorkerProfile savedWorkerProfile =
+                workerProfileRepository.save(
+                        workerProfile
+                );
 
         return WorkerProfileMapper.toResponseDTO(
-                workerProfileRepository.save(workerProfile)
+                savedWorkerProfile
         );
     }
 
-    private void applyRequest(
-            WorkerProfile workerProfile,
-            WorkerProfileRequestDTO request,
-            String normalizedAbn
+    /*
+     * ============================================================
+     * REACTIVATE
+     * ============================================================
+     */
+
+    @Transactional
+    public WorkerProfileResponseDTO reactivate(
+            Long companyId,
+            Long workerProfileId
     ) {
-        workerProfile.setAbn(normalizedAbn);
-
-        workerProfile.setGstRegistered(
-                Boolean.TRUE.equals(request.gstRegistered())
+        validateCurrentUserCanManageWorkers(
+                companyId
         );
 
-        workerProfile.setPhone(
-                normalizeOptionalText(request.phone())
+        WorkerProfile workerProfile =
+                findEntityById(workerProfileId);
+
+        validateWorkerBelongsToCompany(
+                workerProfile,
+                companyId
         );
 
-        workerProfile.setDefaultHourlyRate(
-                request.defaultHourlyRate()
-        );
-
-        workerProfile.setNotes(
-                normalizeOptionalText(request.notes())
-        );
-
-        workerProfile.setBankDetails(
-                toBankDetails(request.bankDetails())
-        );
-
-        workerProfile.setSuperDetails(
-                toSuperDetails(request.superDetails())
-        );
-    }
-
-    private BankDetails toBankDetails(
-            BankDetailsRequestDTO request
-    ) {
-        if (request == null) {
-            return null;
+        if (
+                workerProfile.getStatus()
+                        != WorkerProfileStatus.SUSPENDED
+        ) {
+            throw new InvalidOperationException(
+                    "Only suspended worker profiles can be reactivated."
+            );
         }
 
-        BankDetails bankDetails = new BankDetails();
-
-        bankDetails.setBankName(
-                normalizeOptionalText(request.bankName())
+        WorkerProfileRules.updateCompletionStatus(
+                workerProfile
         );
 
-        bankDetails.setAccountName(
-                normalizeOptionalText(request.accountName())
-        );
+        WorkerProfile savedWorkerProfile =
+                workerProfileRepository.save(
+                        workerProfile
+                );
 
-        bankDetails.setBsb(
-                normalizeDigits(request.bsb())
+        return WorkerProfileMapper.toResponseDTO(
+                savedWorkerProfile
         );
-
-        bankDetails.setAccountNumber(
-                normalizeDigits(request.accountNumber())
-        );
-
-        return bankDetails;
     }
 
-    private SuperDetails toSuperDetails(
-            SuperDetailsRequestDTO request
-    ) {
-        if (request == null) {
-            return null;
-        }
+    /*
+     * ============================================================
+     * ENTITY LOOKUPS
+     * ============================================================
+     */
 
-        SuperDetails superDetails = new SuperDetails();
+    private WorkerProfile findCurrentWorkerProfileEntity() {
 
-        superDetails.setFundName(
-                normalizeOptionalText(request.fundName())
-        );
+        AppUser currentUser =
+                authenticatedUserService.getCurrentUser();
 
-        superDetails.setUsi(
-                normalizeOptionalText(request.usi())
-        );
-
-        superDetails.setMemberNumber(
-                normalizeOptionalText(request.memberNumber())
-        );
-
-        return superDetails;
-    }
-
-    private void validateUniqueAbn(
-            String abn,
-            Long currentProfileId
-    ) {
-        if (abn == null) {
-            return;
-        }
-
-        workerProfileRepository.findByAbn(abn)
-                .filter(existingProfile ->
-                        currentProfileId == null
-                                || !existingProfile.getId()
-                                .equals(currentProfileId)
+        return workerProfileRepository
+                .findByAppUserId(
+                        currentUser.getId()
                 )
-                .ifPresent(existingProfile -> {
-                    throw new DuplicateResourceException(
-                            "A worker profile already exists with ABN: "
-                                    + abn
-                    );
-                });
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Worker profile was not found "
+                                        + "for the current user."
+                        )
+                );
     }
 
-    private WorkerProfile findEntityById(Long id) {
-        return workerProfileRepository.findById(id)
+    private WorkerProfile findEntityById(
+            Long workerProfileId
+    ) {
+        return workerProfileRepository
+                .findById(workerProfileId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Worker profile not found with ID: "
-                                        + id
+                                        + workerProfileId
                         )
                 );
     }
 
-    private AppUser findAppUserById(Long id) {
-        return appUserRepository.findById(id)
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "App user not found with ID: "
-                                        + id
+    /*
+     * ============================================================
+     * ADMIN PERMISSION
+     * ============================================================
+     */
+
+    private void validateCurrentUserCanManageWorkers(
+            Long companyId
+    ) {
+        AppUser currentUser =
+                authenticatedUserService.getCurrentUser();
+
+        CompanyMembership membership =
+                membershipRepository
+                        .findByAppUserIdAndCompanyId(
+                                currentUser.getId(),
+                                companyId
                         )
-                );
-    }
+                        .orElseThrow(() ->
+                                new AccessDeniedBusinessException(
+                                        "You do not have access "
+                                                + "to this company."
+                                )
+                        );
 
-    private String normalizeAbn(String abn) {
-        return normalizeDigits(abn);
-    }
-
-    private String normalizeDigits(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
+        if (
+                membership.getStatus()
+                        != MembershipStatus.ACTIVE
+        ) {
+            throw new AccessDeniedBusinessException(
+                    "Your company membership is not active."
+            );
         }
 
-        return value.replaceAll("\\D", "");
+        CompanyRole role =
+                membership.getRole();
+
+        boolean canManageWorkers =
+                role == CompanyRole.OWNER
+                        || role == CompanyRole.ADMIN
+                        || role == CompanyRole.MANAGER;
+
+        if (!canManageWorkers) {
+            throw new AccessDeniedBusinessException(
+                    "You do not have permission "
+                            + "to manage workers."
+            );
+        }
     }
 
-    private String normalizeOptionalText(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
+    /*
+     * ============================================================
+     * COMPANY VALIDATION
+     * ============================================================
+     */
 
-        return value.trim();
+    private void validateWorkerBelongsToCompany(
+            WorkerProfile workerProfile,
+            Long companyId
+    ) {
+        CompanyMembership membership =
+                membershipRepository
+                        .findByAppUserIdAndCompanyId(
+                                workerProfile
+                                        .getAppUser()
+                                        .getId(),
+                                companyId
+                        )
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException(
+                                        "Worker profile was not found "
+                                                + "in this company."
+                                )
+                        );
+
+        if (
+                membership.getRole()
+                        != CompanyRole.WORKER
+        ) {
+            throw new ResourceNotFoundException(
+                    "Worker profile was not found "
+                            + "in this company."
+            );
+        }
     }
 }

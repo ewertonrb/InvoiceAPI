@@ -1,10 +1,7 @@
 package com.invoice.invoice_api.service;
 import com.invoice.invoice_api.config.InvitationProperties;
 import com.invoice.invoice_api.dto.joinLink.*;
-import com.invoice.invoice_api.enums.CompanyRole;
-import com.invoice.invoice_api.enums.JoinLinkStatus;
-import com.invoice.invoice_api.enums.MembershipStatus;
-import com.invoice.invoice_api.enums.UserStatus;
+import com.invoice.invoice_api.enums.*;
 import com.invoice.invoice_api.exception.*;
 import com.invoice.invoice_api.mapper.CompanyJoinLinkMapper;
 import com.invoice.invoice_api.model.*;
@@ -709,7 +706,11 @@ public class CompanyJoinLinkService {
                     new WorkerProfile();
 
             workerProfile.setAppUser(appUser);
-            workerProfile.setActive(true);
+            workerProfile.setStatus(
+                    WorkerProfileStatus.INCOMPLETE
+            );
+
+            workerProfile.setGstRegistered(false);
             workerProfile.setGstRegistered(false);
 
             workerProfileRepository.save(

@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.model;
 
+import com.invoice.invoice_api.enums.WorkerProfileStatus;
 import com.invoice.invoice_api.model.embeddable.BankDetails;
 import com.invoice.invoice_api.model.embeddable.SuperDetails;
 import jakarta.persistence.*;
@@ -52,8 +53,12 @@ public class WorkerProfile {
     @Embedded
     private SuperDetails superDetails;
 
-    @Column(nullable = false)
-    private Boolean active = true;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 30)
+    private WorkerProfileStatus status;
+
+    @Column(name = "completed_at")
+    private LocalDateTime completedAt;
 
     @Column(length = 1000)
     private String notes;
@@ -78,8 +83,8 @@ public class WorkerProfile {
         createdAt = now;
         updatedAt = now;
 
-        if (active == null) {
-            active = true;
+        if (status == null) {
+            status = WorkerProfileStatus.INCOMPLETE;
         }
 
         if (gstRegistered == null) {
@@ -94,6 +99,10 @@ public class WorkerProfile {
 
     public Long getId() {
         return id;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
     }
 
     public AppUser getAppUser() {
@@ -152,12 +161,20 @@ public class WorkerProfile {
         this.superDetails = superDetails;
     }
 
-    public Boolean getActive() {
-        return active;
+    public WorkerProfileStatus getStatus() {
+        return status;
     }
 
-    public void setActive(Boolean active) {
-        this.active = active;
+    public void setStatus(WorkerProfileStatus status) {
+        this.status = status;
+    }
+
+    public LocalDateTime getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(LocalDateTime completedAt) {
+        this.completedAt = completedAt;
     }
 
     public String getNotes() {
@@ -172,7 +189,23 @@ public class WorkerProfile {
         return createdAt;
     }
 
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
     public LocalDateTime getUpdatedAt() {
         return updatedAt;
+    }
+
+    public void setUpdatedAt(LocalDateTime updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
+    public boolean isComplete() {
+        return status == WorkerProfileStatus.COMPLETE;
+    }
+
+    public boolean isIncomplete() {
+        return status == WorkerProfileStatus.INCOMPLETE;
     }
 }

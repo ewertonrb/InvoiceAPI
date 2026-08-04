@@ -1,7 +1,13 @@
 package com.invoice.invoice_api.mapper;
 
+import com.invoice.invoice_api.dto.workLog.WorkLogFinancialSnapshotResponseDTO;
 import com.invoice.invoice_api.dto.workLog.WorkLogResponseDTO;
+import com.invoice.invoice_api.dto.workLog.WorkLogTimeResponseDTO;
+import com.invoice.invoice_api.dto.workLog.WorkLogTravelResponseDTO;
 import com.invoice.invoice_api.model.*;
+import com.invoice.invoice_api.model.embeddable.workLog.WorkLogFinancialSnapshot;
+import com.invoice.invoice_api.model.embeddable.workLog.WorkLogTime;
+import com.invoice.invoice_api.model.embeddable.workLog.WorkLogTravel;
 
 public final class WorkLogMapper {
 
@@ -33,37 +39,169 @@ public final class WorkLogMapper {
         return new WorkLogResponseDTO(
                 workLog.getId(),
 
-                workLog.getWorkerProfile().getId(),
-                workLog.getWorkerProfile().getAppUser().getId(),
-                workLog.getWorkerProfile().getAppUser().getFullName(),
-                workLog.getWorkerProfile().getAppUser().getEmail(),
+                workerProfile.getId(),
 
-                workLog.getProjectPosition().getId(),
-                workLog.getProjectPosition().getPositionName(),
+                appUser.getId(),
 
-                workLog.getProjectPosition().getProject().getId(),
-                workLog.getProjectPosition().getProject().getName(),
+                appUser.getFullName(),
 
-                workLog.getProjectPosition().getProject().getCompany().getId(),
-                workLog.getProjectPosition().getProject().getCompany().getName(),
+                appUser.getEmail(),
+
+                projectPosition.getId(),
+
+                projectPosition.getPositionName(),
+
+                project.getId(),
+
+                project.getName(),
+
+                company.getId(),
+
+                company.getName(),
 
                 workLog.getWorkDate(),
 
+                toWorkLogTimeResponseDTO(
+                        workLog.getWorkTime()
+                ),
+
                 workLog.getRegularHours(),
+
                 workLog.getOvertime15Hours(),
+
                 workLog.getOvertime20Hours(),
+
                 workLog.getSaturdayHours(),
+
                 workLog.getSundayHours(),
+
                 workLog.getPublicHolidayHours(),
-                workLog.getTravelHours(),
-                workLog.getKilometres(),
-                workLog.getLafhaNights(),
+
+                toWorkLogTravelResponseDTO(
+                        workLog.getTravel()
+                ),
+
+                toFinancialSnapshotResponseDTO(
+                        workLog.getFinancialSnapshot()
+                ),
+
+                workLog.getNotes(),
+
+                workLog.getManagerNotes(),
 
                 workLog.getStatus(),
+
                 workLog.getSubmittedAt(),
+
                 workLog.getApprovedAt(),
+
                 workLog.getRejectedAt(),
-                workLog.getRejectionReason()
+
+                workLog.getRejectionReason(),
+
+                workLog.getCreatedAt(),
+
+                workLog.getUpdatedAt()
+        );
+    }
+
+    private static WorkLogTimeResponseDTO toWorkLogTimeResponseDTO(
+            WorkLogTime workTime
+    ) {
+        if (workTime == null) {
+            return null;
+        }
+
+        return new WorkLogTimeResponseDTO(
+                workTime.getStartTime(),
+
+                workTime.getFinishTime(),
+
+                workTime.getUnpaidBreakMinutes(),
+
+                workTime.calculateWorkedMinutes(),
+
+                workTime.crossesMidnight()
+        );
+    }
+
+    private static WorkLogTravelResponseDTO toWorkLogTravelResponseDTO(
+            WorkLogTravel travel
+    ) {
+        if (travel == null) {
+            return null;
+        }
+
+        return new WorkLogTravelResponseDTO(
+                travel.getTravelHours(),
+
+                travel.getKilometres(),
+
+                travel.getLafhaNights()
+        );
+    }
+
+    private static WorkLogFinancialSnapshotResponseDTO toFinancialSnapshotResponseDTO(
+            WorkLogFinancialSnapshot snapshot
+    ) {
+        if (snapshot == null) {
+            return null;
+        }
+
+        return new WorkLogFinancialSnapshotResponseDTO(
+                snapshot.getCompanyName(),
+
+                snapshot.getProjectName(),
+
+                snapshot.getPositionName(),
+
+                snapshot.getWorkerName(),
+
+                snapshot.getWorkerAbn(),
+
+                snapshot.getWorkerGstRegistered(),
+
+                snapshot.getRegularRate(),
+
+                snapshot.getOvertime15Rate(),
+
+                snapshot.getOvertime20Rate(),
+
+                snapshot.getSaturdayRate(),
+
+                snapshot.getSundayRate(),
+
+                snapshot.getPublicHolidayRate(),
+
+                snapshot.getTravelRate(),
+
+                snapshot.getKilometreRate(),
+
+                snapshot.getLafhaRate(),
+
+                snapshot.getRegularAmount(),
+
+                snapshot.getOvertime15Amount(),
+
+                snapshot.getOvertime20Amount(),
+
+                snapshot.getSaturdayAmount(),
+
+                snapshot.getSundayAmount(),
+
+                snapshot.getPublicHolidayAmount(),
+
+                snapshot.getTravelAmount(),
+
+                snapshot.getKilometreAmount(),
+
+                snapshot.getLafhaAmount(),
+
+                snapshot.getSubtotalAmount(),
+
+                snapshot.getGstAmount(),
+
+                snapshot.getTotalAmount()
         );
     }
 }

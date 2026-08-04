@@ -2,10 +2,7 @@ package com.invoice.invoice_api.service;
 
 import com.invoice.invoice_api.config.InvitationProperties;
 import com.invoice.invoice_api.dto.companyInvitation.*;
-import com.invoice.invoice_api.enums.CompanyRole;
-import com.invoice.invoice_api.enums.InvitationStatus;
-import com.invoice.invoice_api.enums.MembershipStatus;
-import com.invoice.invoice_api.enums.UserStatus;
+import com.invoice.invoice_api.enums.*;
 import com.invoice.invoice_api.exception.*;
 import com.invoice.invoice_api.mapper.CompanyInvitationMapper;
 import com.invoice.invoice_api.model.*;
@@ -529,7 +526,11 @@ public class CompanyInvitationService {
                 new WorkerProfile();
 
         workerProfile.setAppUser(appUser);
-        workerProfile.setActive(true);
+        workerProfile.setStatus(
+                WorkerProfileStatus.INCOMPLETE
+        );
+
+        workerProfile.setGstRegistered(false);
         workerProfile.setGstRegistered(false);
 
         workerProfileRepository.save(

@@ -114,5 +114,23 @@ public interface ProjectRoleRateRepository extends JpaRepository<ProjectRoleRate
             @Param("workDate")
             LocalDate workDate
     );
+    @Query("""
+        SELECT DISTINCT rate
+        FROM ProjectRoleRate rate
+        LEFT JOIN FETCH rate.items item
+        WHERE rate.projectPosition.id = :projectPositionId
+          AND rate.active = true
+          AND rate.effectiveFrom <= :workDate
+          AND (
+                rate.effectiveTo IS NULL
+                OR rate.effectiveTo >= :workDate
+          )
+        """)
+    Optional<ProjectRoleRate> findActiveRateForDate(
+            @Param("projectPositionId")
+            Long projectPositionId,
 
+            @Param("workDate")
+            LocalDate workDate
+    );
 }
