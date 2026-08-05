@@ -21,6 +21,7 @@ public class CompanyService {
     }
 
     public CompanyResponseDTO create(CompanyRequestDTO request) {
+
         if (companyRepository.existsByAbn(request.abn())) {
             throw new DuplicateResourceException("Company ABN already exists.");
         }
@@ -29,8 +30,14 @@ public class CompanyService {
         }
 
         Company company = CompanyMapper.toEntity(request);
-        Company savedCompany = companyRepository.save(company);
 
+        company.setContractorInvoiceGstEnabled(
+                request.contractorInvoiceGstEnabled() == null
+                        ? false
+                        : request.contractorInvoiceGstEnabled()
+        );
+
+        Company savedCompany = companyRepository.save(company);
         return CompanyMapper.toResponseDTO(savedCompany);
     }
 
@@ -58,6 +65,12 @@ public class CompanyService {
                 && companyRepository.existsByEmail(request.email())) {
             throw new DuplicateResourceException("Company email already exists.");
         }
+
+        company.setContractorInvoiceGstEnabled(
+                request.contractorInvoiceGstEnabled() == null
+                        ? company.getContractorInvoiceGstEnabled()
+                        : request.contractorInvoiceGstEnabled()
+        );
 
         CompanyMapper.updateEntity(company, request);
 

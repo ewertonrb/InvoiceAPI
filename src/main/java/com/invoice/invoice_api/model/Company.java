@@ -24,6 +24,12 @@ public class Company {
     private String phone;
     private String address;
 
+    @Column(
+            name = "contractor_invoice_gst_enabled",
+            nullable = false
+    )
+    private Boolean contractorInvoiceGstEnabled = true;
+
     private Boolean active = true;
 
     private LocalDateTime createdAt;
@@ -34,6 +40,9 @@ public class Company {
 
     @PrePersist
     public void prePersist(){
+        if (contractorInvoiceGstEnabled == null) {
+            contractorInvoiceGstEnabled = true;
+        }
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
     }
@@ -114,4 +123,16 @@ public class Company {
     public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
+
+    public Boolean getContractorInvoiceGstEnabled() {
+        return contractorInvoiceGstEnabled;
+    }
+
+    public void setContractorInvoiceGstEnabled(
+            Boolean contractorInvoiceGstEnabled
+    ) {
+        this.contractorInvoiceGstEnabled =
+                contractorInvoiceGstEnabled;
+    }
+
 }

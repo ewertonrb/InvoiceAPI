@@ -7,6 +7,7 @@ import com.invoice.invoice_api.model.*;
 import com.invoice.invoice_api.model.embeddable.workLog.WorkLogFinancialSnapshot;
 import com.invoice.invoice_api.model.embeddable.workLog.WorkLogTravel;
 import com.invoice.invoice_api.repository.ProjectRoleRateRepository;
+import jakarta.persistence.Column;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -16,8 +17,8 @@ import java.util.Map;
 
 @Component
 public class WorkLogFinancialSnapshotBuilder {
-    private static final BigDecimal ZERO =
-            BigDecimal.ZERO;
+
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     /*
      * Keep this configurable when environment-specific
@@ -27,6 +28,7 @@ public class WorkLogFinancialSnapshotBuilder {
             new BigDecimal("0.10");
 
     private final ProjectRoleRateRepository rateRepository;
+
 
     public WorkLogFinancialSnapshotBuilder(
             ProjectRoleRateRepository rateRepository
@@ -171,13 +173,22 @@ public class WorkLogFinancialSnapshotBuilder {
                                 .add(lafha.amount())
                 );
 
-        boolean gstRegistered =
+        boolean workerGstRegistered =
                 Boolean.TRUE.equals(
                         workerProfile.getGstRegistered()
                 );
 
+        boolean companyGstEnabled =
+                Boolean.TRUE.equals(
+                        company.getContractorInvoiceGstEnabled()
+                );
+
+        boolean gstApplied =
+                workerGstRegistered
+                        && companyGstEnabled;
+
         BigDecimal gstAmount =
-                gstRegistered
+                gstApplied
                         ? money(
                         subtotal.multiply(GST_RATE)
                 )
@@ -215,7 +226,11 @@ public class WorkLogFinancialSnapshotBuilder {
         );
 
         snapshot.setWorkerGstRegistered(
-                gstRegistered
+                workerGstRegistered
+        );
+
+        snapshot.setGstApplied(
+                gstApplied
         );
 
         /*

@@ -24,6 +24,8 @@ public record CompanyRequestDTO(
         @Size(max = 255, message = "Address must have at most 255 characters")
         String address,
 
+        Boolean contractorInvoiceGstEnabled,
+
         Boolean active
 ) {
 }

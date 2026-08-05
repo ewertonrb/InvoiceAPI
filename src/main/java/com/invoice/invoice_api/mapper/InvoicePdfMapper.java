@@ -1,5 +1,6 @@
 package com.invoice.invoice_api.mapper;
 
+
 import com.invoice.invoice_api.dto.pdf.InvoicePdfDTO;
 import com.invoice.invoice_api.dto.pdf.InvoicePdfItemDTO;
 import com.invoice.invoice_api.model.*;
@@ -20,17 +21,40 @@ public final class InvoicePdfMapper {
             return null;
         }
 
-        Company company = invoice.getCompany();
+        Company company =
+                invoice.getCompany();
 
-        WorkerProfile workerProfile = invoice.getWorkerProfile();
+        WorkerProfile workerProfile =
+                invoice.getWorkerProfile();
 
-        AppUser appUser = workerProfile.getAppUser();
+        AppUser appUser =
+                workerProfile.getAppUser();
 
-        List<InvoicePdfItemDTO> items = invoice.getItems()
+        BankDetails bankDetails =
+                workerProfile.getBankDetails();
+
+        List<InvoicePdfItemDTO> items =
+                invoice.getItems()
                         .stream()
-                        .map(InvoicePdfMapper::toItemDTO)
+                        .map(
+                                InvoicePdfMapper
+                                        ::toItemDTO
+                        )
                         .toList();
-        BankDetails bankDetails = workerProfile.getBankDetails();
+
+        boolean gstApplied =
+                invoice.getItems()
+                        .stream()
+                        .map(InvoiceItem::getWorkLog)
+                        .map(WorkLog::getFinancialSnapshot)
+                        .filter(snapshot ->
+                                snapshot != null
+                        )
+                        .anyMatch(snapshot ->
+                                Boolean.TRUE.equals(
+                                        snapshot.getGstApplied()
+                                )
+                        );
 
         return new InvoicePdfDTO(
                 company.getName(),
@@ -58,6 +82,8 @@ public final class InvoicePdfMapper {
                 workerProfile.getAbn(),
 
                 workerProfile.getGstRegistered(),
+
+                gstApplied,
 
                 bankDetails == null
                         ? null

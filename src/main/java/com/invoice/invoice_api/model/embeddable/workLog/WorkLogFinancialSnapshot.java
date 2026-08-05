@@ -48,6 +48,11 @@ public class WorkLogFinancialSnapshot {
     )
     private Boolean workerGstRegistered;
 
+    @Column(
+            name = "snapshot_gst_applied"
+    )
+    private Boolean gstApplied;
+
     /*
      * ============================================================
      * RATE SNAPSHOT
@@ -472,6 +477,14 @@ public class WorkLogFinancialSnapshot {
             BigDecimal gstAmount
     ) {
         this.gstAmount = gstAmount;
+    }
+
+    public Boolean getGstApplied() {
+        return gstApplied;
+    }
+
+    public void setGstApplied(Boolean gstApplied) {
+        this.gstApplied = gstApplied;
     }
 
     public BigDecimal getTotalAmount() {

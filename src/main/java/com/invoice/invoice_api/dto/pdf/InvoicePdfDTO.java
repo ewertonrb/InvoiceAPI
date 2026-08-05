@@ -20,6 +20,7 @@ public record InvoicePdfDTO(
         String workerName,
         String workerAbn,
         Boolean workerGstRegistered,
+        Boolean gstApplied,
 
         String bankName,
         String accountName,

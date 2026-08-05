@@ -313,10 +313,14 @@
 
             <div
                     class="party-line"
-                    th:text="${invoice.workerGstRegistered
-                        ? 'GST registered'
-                        : 'Not GST registered'}">
-                GST registered
+                    th:if="${invoice.gstApplied}">
+                GST applied to this invoice
+            </div>
+
+            <div
+                    class="party-line"
+                    th:unless="${invoice.gstApplied}">
+                GST not applied to this invoice
             </div>
         </td>
     </tr>

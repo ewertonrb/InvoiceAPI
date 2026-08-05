@@ -10,6 +10,7 @@ public record CompanyResponseDTO(
         String phone,
         String address,
         Boolean active,
+        Boolean contractorInvoiceGstEnabled,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {

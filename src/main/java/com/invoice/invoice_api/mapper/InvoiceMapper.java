@@ -13,6 +13,7 @@ public final class InvoiceMapper {
     }
 
     public static InvoiceResponseDTO toResponseDTO(Invoice invoice) {
+
         if (invoice == null) {return null;}
 
         WorkerProfile workerProfile = invoice.getWorkerProfile();
@@ -24,6 +25,20 @@ public final class InvoiceMapper {
                         .stream()
                         .map(InvoiceMapper::toItemResponseDTO)
                         .toList();
+
+        boolean gstApplied =
+                invoice.getItems()
+                        .stream()
+                        .map(InvoiceItem::getWorkLog)
+                        .map(WorkLog::getFinancialSnapshot)
+                        .filter(snapshot ->
+                                snapshot != null
+                        )
+                        .anyMatch(snapshot ->
+                                Boolean.TRUE.equals(
+                                        snapshot.getGstApplied()
+                                )
+                        );
 
         return new InvoiceResponseDTO(
                 invoice.getId(),

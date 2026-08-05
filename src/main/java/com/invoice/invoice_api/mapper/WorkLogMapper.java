@@ -161,6 +161,8 @@ public final class WorkLogMapper {
 
                 snapshot.getWorkerGstRegistered(),
 
+                snapshot.getGstApplied(),
+
                 snapshot.getRegularRate(),
 
                 snapshot.getOvertime15Rate(),

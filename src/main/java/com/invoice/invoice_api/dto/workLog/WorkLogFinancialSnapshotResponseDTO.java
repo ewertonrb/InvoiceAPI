@@ -15,6 +15,8 @@ public record WorkLogFinancialSnapshotResponseDTO(
 
         Boolean workerGstRegistered,
 
+        Boolean gstApplied,
+
         BigDecimal regularRate,
 
         BigDecimal overtime15Rate,
