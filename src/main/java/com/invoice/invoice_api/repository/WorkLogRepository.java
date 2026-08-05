@@ -3,6 +3,8 @@ package com.invoice.invoice_api.repository;
 import com.invoice.invoice_api.enums.WorkLogStatus;
 import com.invoice.invoice_api.model.WorkLog;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -74,5 +76,45 @@ public interface WorkLogRepository extends JpaRepository<WorkLog, Long> {
             Long projectPositionId,
             LocalDate workDate,
             WorkLogStatus excludedStatus
+    );
+
+    @Query("""
+        SELECT workLog
+        FROM WorkLog workLog
+
+        JOIN FETCH workLog.workerProfile workerProfile
+        JOIN FETCH workerProfile.appUser appUser
+
+        JOIN FETCH workLog.projectPosition projectPosition
+        JOIN FETCH projectPosition.project project
+        JOIN FETCH project.company company
+
+        WHERE company.id = :companyId
+          AND workLog.status = :status
+          AND workLog.workDate BETWEEN :periodStart AND :periodEnd
+
+          AND NOT EXISTS (
+                SELECT invoiceItem.id
+                FROM InvoiceItem invoiceItem
+                WHERE invoiceItem.workLog.id = workLog.id
+          )
+
+        ORDER BY
+            workerProfile.id ASC,
+            workLog.workDate ASC,
+            workLog.id ASC
+        """)
+    List<WorkLog> findAvailableForInvoicePeriod(
+            @Param("companyId")
+            Long companyId,
+
+            @Param("status")
+            WorkLogStatus status,
+
+            @Param("periodStart")
+            LocalDate periodStart,
+
+            @Param("periodEnd")
+            LocalDate periodEnd
     );
 }

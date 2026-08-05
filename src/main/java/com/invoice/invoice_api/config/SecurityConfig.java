@@ -46,6 +46,7 @@ public class SecurityConfig {
                                 "/public/invitations/decline",
                                 "/public/join-links/accept"
                         ).permitAll()
+
                         .requestMatchers(
                                 HttpMethod.GET,
                                 "/public/invitations",
@@ -53,6 +54,24 @@ public class SecurityConfig {
                                 "/public/join-links",
                                 "/public/join-links/**"
                         ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/invoices/**"
+                        ).authenticated()
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/invoices/drafts"
+                        )
+                        .hasAnyAuthority("OWNER", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/invoices/*/issue"
+                        )
+                        .hasAnyAuthority("OWNER", "MANAGER")
+
                         .anyRequest().authenticated()
                 )
 
