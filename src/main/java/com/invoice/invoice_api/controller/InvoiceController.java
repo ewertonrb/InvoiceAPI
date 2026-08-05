@@ -5,10 +5,10 @@ import com.invoice.invoice_api.enums.InvoiceStatus;
 import com.invoice.invoice_api.service.invoice.InvoiceDraftService;
 import com.invoice.invoice_api.service.invoice.InvoicePeriodPreviewService;
 import com.invoice.invoice_api.service.invoice.InvoiceService;
+import com.invoice.invoice_api.service.pdf.InvoicePdfService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -21,11 +21,15 @@ public class InvoiceController {
     private final InvoicePeriodPreviewService invoicePeriodPreviewService;
     private final InvoiceDraftService invoiceDraftService;
     private final InvoiceService invoiceService;
+    private final InvoicePdfService invoicePdfService;
 
-    public InvoiceController(InvoicePeriodPreviewService invoicePeriodPreviewService, InvoiceDraftService invoiceDraftService, InvoiceService invoiceservice) {
+    public InvoiceController(InvoicePeriodPreviewService invoicePeriodPreviewService, InvoiceDraftService invoiceDraftService,
+                             InvoiceService invoiceservice, InvoicePdfService invoicePdfService
+    ) {
         this.invoicePeriodPreviewService = invoicePeriodPreviewService;
         this.invoiceDraftService = invoiceDraftService;
         this.invoiceService = invoiceservice;
+        this.invoicePdfService = invoicePdfService;
     }
 
     /*
@@ -115,6 +119,46 @@ public class InvoiceController {
     ) {
         return ResponseEntity.ok(
                 invoiceService.cancel(id)
+        );
+    }
+    /*
+     * ============================================================
+     * PDF
+     * ============================================================
+     */
+
+    @GetMapping("/{id}/pdf")
+    public ResponseEntity<byte[]> generatePdf(
+            @PathVariable Long id
+    ) {
+        byte[] pdf =
+                invoicePdfService.generate(id);
+
+        String filename =
+                invoicePdfService.getFilename(id);
+
+        HttpHeaders headers =
+                new HttpHeaders();
+
+        headers.setContentType(
+                MediaType.APPLICATION_PDF
+        );
+
+        headers.setContentDisposition(
+                ContentDisposition
+                        .attachment()
+                        .filename(filename)
+                        .build()
+        );
+
+        headers.setContentLength(
+                pdf.length
+        );
+
+        return new ResponseEntity<>(
+                pdf,
+                headers,
+                HttpStatus.OK
         );
     }
 }

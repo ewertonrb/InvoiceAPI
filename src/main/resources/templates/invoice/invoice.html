@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html
+        lang="en"
+        xmlns:th="http://www.thymeleaf.org"
+>
+<head>
+    <meta charset="UTF-8"/>
+
+    <title
+            th:text="'Invoice ' + ${invoice.invoiceNumber}">
+        Invoice
+    </title>
+
+    <style>
+        @page {
+            size: A4;
+            margin: 25mm 18mm 20mm 18mm;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            color: #222222;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            line-height: 1.45;
+        }
+
+        .invoice-header {
+            text-align: right;
+            margin-bottom: 34px;
+        }
+
+        .invoice-title {
+            margin: 0 0 14px 0;
+            font-size: 29px;
+            font-weight: 400;
+            letter-spacing: 7px;
+            text-transform: uppercase;
+        }
+
+        .invoice-meta {
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .divider {
+            height: 1px;
+            margin: 20px 0;
+            background: #555555;
+        }
+
+        .party-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .party-table td {
+            width: 50%;
+            padding: 0 12px 0 8px;
+            vertical-align: top;
+        }
+
+        .section-title {
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: 400;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .party-name {
+            margin-bottom: 3px;
+            font-weight: bold;
+        }
+
+        .party-line {
+            margin: 1px 0;
+        }
+
+        .items-table {
+            width: 100%;
+            margin-top: 28px;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        .items-table th {
+            padding: 10px 8px 14px 8px;
+            border-bottom: 1px solid #555555;
+            font-size: 11px;
+            font-weight: 400;
+            letter-spacing: 1.8px;
+            text-align: left;
+            text-transform: uppercase;
+        }
+
+        .items-table td {
+            padding: 14px 8px;
+            vertical-align: top;
+        }
+
+        .items-table tbody tr:nth-child(odd) {
+            background: #f7f7f7;
+        }
+
+        .description-column {
+            width: 34%;
+        }
+
+        .date-column {
+            width: 16%;
+        }
+
+        .amount-column {
+            width: 16%;
+            text-align: right;
+        }
+
+        .total-column {
+            width: 18%;
+            text-align: right;
+        }
+
+        .money {
+            white-space: nowrap;
+            text-align: right;
+        }
+
+        .summary-wrapper {
+            width: 100%;
+            margin-top: 26px;
+        }
+
+        .summary-table {
+            width: 42%;
+            margin-left: auto;
+            border-collapse: collapse;
+        }
+
+        .summary-table td {
+            padding: 5px 0 5px 12px;
+        }
+
+        .summary-label {
+            letter-spacing: 1px;
+            text-align: left;
+            text-transform: uppercase;
+        }
+
+        .summary-value {
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .amount-due-row td {
+            padding-top: 14px;
+            border-top: 1px solid #555555;
+            font-size: 16px;
+            letter-spacing: 2px;
+        }
+
+        .payment-details {
+            margin-top: 42px;
+            padding-left: 8px;
+        }
+
+        .payment-title {
+            margin-bottom: 10px;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .payment-line {
+            margin: 2px 0;
+        }
+
+        .notes {
+            margin-top: 30px;
+            padding-top: 12px;
+            border-top: 1px solid #dddddd;
+            color: #555555;
+            font-size: 10px;
+        }
+
+        .footer {
+            position: fixed;
+            right: 0;
+            bottom: -8mm;
+            left: 0;
+            color: #777777;
+            font-size: 9px;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+
+<header class="invoice-header">
+    <h1
+            class="invoice-title"
+            th:text="'Invoice ' + ${invoice.invoiceNumber}">
+        INVOICE INV-2026-000001
+    </h1>
+
+    <div class="invoice-meta">
+        <div>
+            Issued:
+            <span
+                    th:text="${invoice.issueDate != null
+                        ? #temporals.format(invoice.issueDate, 'dd/MM/yyyy')
+                        : 'Draft'}">
+                05/08/2026
+            </span>
+        </div>
+
+        <div>
+            Due:
+            <span
+                    th:text="${invoice.dueDate != null
+                        ? #temporals.format(invoice.dueDate, 'dd/MM/yyyy')
+                        : 'Not defined'}">
+                19/08/2026
+            </span>
+        </div>
+
+        <div>
+            Period:
+            <span
+                    th:text="${#temporals.format(
+                        invoice.periodStart,
+                        'dd/MM/yyyy'
+                    )}">
+                01/08/2026
+            </span>
+
+            -
+
+            <span
+                    th:text="${#temporals.format(
+                        invoice.periodEnd,
+                        'dd/MM/yyyy'
+                    )}">
+                07/08/2026
+            </span>
+        </div>
+    </div>
+</header>
+
+<div class="divider"></div>
+
+<table class="party-table">
+    <tr>
+        <td>
+            <div class="section-title">Bill to:</div>
+
+            <div
+                    class="party-name"
+                    th:text="${invoice.companyName}">
+                Dabe Labour
+            </div>
+
+            <div
+                    class="party-line"
+                    th:if="${invoice.companyEmail != null}"
+                    th:text="${invoice.companyEmail}">
+                accounts@example.com
+            </div>
+
+            <div
+                    class="party-line"
+                    th:if="${invoice.companyAddress != null}"
+                    th:text="${invoice.companyAddress}">
+                Melbourne VIC
+            </div>
+
+            <div
+                    class="party-line"
+                    th:if="${invoice.companyAbn != null}"
+                    th:text="'ABN: ' + ${invoice.companyAbn}">
+                ABN: 99 654 058 643
+            </div>
+
+            <div
+                    class="party-line"
+                    th:if="${invoice.companyPhone != null}"
+                    th:text="'Phone: ' + ${invoice.companyPhone}">
+                Phone: 0400 000 000
+            </div>
+        </td>
+
+        <td>
+            <div class="section-title">Payable to:</div>
+
+            <div
+                    class="party-name"
+                    th:text="${invoice.workerName}">
+                John Smith
+            </div>
+
+            <div
+                    class="party-line"
+                    th:if="${invoice.workerAbn != null}"
+                    th:text="'ABN: ' + ${invoice.workerAbn}">
+                ABN: 51 824 736 195
+            </div>
+
+            <div
+                    class="party-line"
+                    th:text="${invoice.workerGstRegistered
+                        ? 'GST registered'
+                        : 'Not GST registered'}">
+                GST registered
+            </div>
+        </td>
+    </tr>
+</table>
+
+<table class="items-table">
+    <thead>
+    <tr>
+        <th class="description-column">
+            Description
+        </th>
+
+        <th class="date-column">
+            Date
+        </th>
+
+        <th class="amount-column">
+            Subtotal
+        </th>
+
+        <th class="amount-column">
+            GST
+        </th>
+
+        <th class="total-column">
+            Total
+        </th>
+    </tr>
+    </thead>
+
+    <tbody>
+    <tr th:each="item : ${invoice.items}">
+        <td
+                class="description-column"
+                th:text="${item.description}">
+            Grills - Installer
+        </td>
+
+        <td
+                class="date-column"
+                th:text="${#temporals.format(
+                    item.workDate,
+                    'dd/MM/yyyy'
+                )}">
+            03/08/2026
+        </td>
+
+        <td
+                class="money"
+                th:text="'$' + ${#numbers.formatDecimal(
+                    item.subtotalAmount,
+                    1,
+                    2
+                )}">
+            $471.25
+        </td>
+
+        <td
+                class="money"
+                th:text="'$' + ${#numbers.formatDecimal(
+                    item.gstAmount,
+                    1,
+                    2
+                )}">
+            $47.13
+        </td>
+
+        <td
+                class="money"
+                th:text="'$' + ${#numbers.formatDecimal(
+                    item.totalAmount,
+                    1,
+                    2
+                )}">
+            $518.38
+        </td>
+    </tr>
+    </tbody>
+</table>
+
+<div class="summary-wrapper">
+    <table class="summary-table">
+        <tr>
+            <td class="summary-label">
+                Subtotal
+            </td>
+
+            <td
+                    class="summary-value"
+                    th:text="'$' + ${#numbers.formatDecimal(
+                        invoice.subtotalAmount,
+                        1,
+                        2
+                    )}">
+                $471.25
+            </td>
+        </tr>
+
+        <tr>
+            <td class="summary-label">
+                GST
+            </td>
+
+            <td
+                    class="summary-value"
+                    th:text="'$' + ${#numbers.formatDecimal(
+                        invoice.gstAmount,
+                        1,
+                        2
+                    )}">
+                $47.13
+            </td>
+        </tr>
+
+        <tr class="amount-due-row">
+            <td class="summary-label">
+                Amount due
+            </td>
+
+            <td
+                    class="summary-value"
+                    th:text="'$' + ${#numbers.formatDecimal(
+                        invoice.totalAmount,
+                        1,
+                        2
+                    )}">
+                $518.38
+            </td>
+        </tr>
+    </table>
+</div>
+
+<section class="payment-details">
+    <div class="payment-title">
+        Payment details
+    </div>
+
+    <div
+            class="payment-line"
+            th:if="${invoice.bankName != null}"
+            th:text="'Bank transfer: ' + ${invoice.bankName}">
+        Bank transfer: CommBank
+    </div>
+
+    <div
+            class="payment-line"
+            th:if="${invoice.accountName != null}"
+            th:text="'Name: ' + ${invoice.accountName}">
+        Name: John Smith
+    </div>
+
+    <div
+            class="payment-line"
+            th:if="${invoice.bsb != null}"
+            th:text="'BSB: ' + ${invoice.bsb}">
+        BSB: 063010
+    </div>
+
+    <div
+            class="payment-line"
+            th:if="${invoice.accountNumber != null}"
+            th:text="'Account: ' + ${invoice.accountNumber}">
+        Account: 14984310
+    </div>
+</section>
+
+<div class="notes">
+    Please use the invoice number as the payment reference.
+</div>
+
+<footer class="footer">
+    Generated by InvoiceAPI
+</footer>
+
+</body>
+</html>
