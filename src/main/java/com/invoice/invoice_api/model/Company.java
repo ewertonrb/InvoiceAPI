@@ -1,12 +1,20 @@
 package com.invoice.invoice_api.model;
 
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
 
 import java.time.LocalDateTime;
+import java.sql.Types;
 
 @Entity
 @Table(name = "companies")
 public class Company {
+    @JdbcTypeCode(Types.VARBINARY)
+    @Column(name = "logo_data", columnDefinition = "bytea")
+    private byte[] logoData;
+
+    @Column(name = "logo_content_type", length = 80)
+    private String logoContentType;
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -55,6 +63,10 @@ public class Company {
     public Long getId() {
         return id;
     }
+    public byte[] getLogoData() { return logoData; }
+    public void setLogoData(byte[] logoData) { this.logoData = logoData; }
+    public String getLogoContentType() { return logoContentType; }
+    public void setLogoContentType(String logoContentType) { this.logoContentType = logoContentType; }
 
     public void setId(Long id) {
         this.id = id;

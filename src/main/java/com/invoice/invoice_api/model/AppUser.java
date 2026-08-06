@@ -2,8 +2,10 @@ package com.invoice.invoice_api.model;
 
 import com.invoice.invoice_api.enums.UserStatus;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
 
 import java.time.LocalDateTime;
+import java.sql.Types;
 
 @Entity
 @Table(
@@ -16,6 +18,12 @@ import java.time.LocalDateTime;
         }
 )
 public class AppUser {
+    @JdbcTypeCode(Types.VARBINARY)
+    @Column(name = "avatar_data", columnDefinition = "bytea")
+    private byte[] avatarData;
+
+    @Column(name = "avatar_content_type", length = 80)
+    private String avatarContentType;
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -73,6 +81,10 @@ public class AppUser {
 
         return (firstName + " " + lastName).trim();
     }
+    public byte[] getAvatarData() { return avatarData; }
+    public void setAvatarData(byte[] avatarData) { this.avatarData = avatarData; }
+    public String getAvatarContentType() { return avatarContentType; }
+    public void setAvatarContentType(String avatarContentType) { this.avatarContentType = avatarContentType; }
 
     @PrePersist
     public void prePersist() {
