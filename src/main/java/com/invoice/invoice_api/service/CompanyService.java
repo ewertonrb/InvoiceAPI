@@ -75,8 +75,9 @@ public class CompanyService {
 
     @Transactional(readOnly = true)
     public List<CompanyResponseDTO> findAll(){
-       return currentUserActiveMemberships().stream()
+        return currentUserActiveMemberships().stream()
                .map(CompanyMembership::getCompany)
+               .filter(company -> Boolean.TRUE.equals(company.getActive()))
                .map(CompanyMapper::toResponseDTO)
                .toList();
     }
@@ -139,6 +140,7 @@ public class CompanyService {
                         MembershipStatus.ACTIVE
                 )
                 .map(CompanyMembership::getCompany)
+                .filter(company -> Boolean.TRUE.equals(company.getActive()))
                 .orElseThrow(() ->
                         new ResourceNotFoundException("Company not found."));
     }

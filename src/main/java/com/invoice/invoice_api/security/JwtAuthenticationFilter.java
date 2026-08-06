@@ -18,6 +18,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -101,7 +102,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter{
                         return false;
                     }
 
-                    List<SimpleGrantedAuthority> authorities = List.of();
+                    List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+                    userDetails.getAuthorities().stream()
+                            .filter(authority -> "PLATFORM_ADMIN".equals(authority.getAuthority()))
+                            .map(authority -> new SimpleGrantedAuthority(authority.getAuthority()))
+                            .forEach(authorities::add);
 
                     if (companyId != null) {
                         Long userId = jwtService.extractUserId(token);
@@ -122,9 +127,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter{
                             return false;
                         }
 
-                        authorities = List.of(
-                                new SimpleGrantedAuthority(tokenRole.name())
-                        );
+                        authorities.add(new SimpleGrantedAuthority(tokenRole.name()));
                         companyContext.set(companyId, tokenRole);
                     }
 

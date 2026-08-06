@@ -46,6 +46,14 @@ public class SecurityConfig {
                                 "/public/invitations/decline"
                         ).permitAll()
 
+                        .requestMatchers("/platform/**")
+                        .hasAuthority("PLATFORM_ADMIN")
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/companies"
+                        ).denyAll()
+
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/public/join-links/accept"
