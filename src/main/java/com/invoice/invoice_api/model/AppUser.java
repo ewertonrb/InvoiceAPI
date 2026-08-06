@@ -1,6 +1,7 @@
 package com.invoice.invoice_api.model;
 
 import com.invoice.invoice_api.enums.UserStatus;
+import com.invoice.invoice_api.enums.SystemRole;
 import jakarta.persistence.*;
 import org.hibernate.annotations.JdbcTypeCode;
 
@@ -65,6 +66,10 @@ public class AppUser {
     @Column(nullable = false, length = 30)
     private UserStatus status;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "system_role", nullable = false, length = 30)
+    private SystemRole systemRole = SystemRole.USER;
+
     public AppUser() {
     }
 
@@ -95,6 +100,10 @@ public class AppUser {
 
         if (status == null) {
             status = UserStatus.ACTIVE;
+        }
+
+        if (systemRole == null) {
+            systemRole = SystemRole.USER;
         }
     }
 
@@ -173,5 +182,13 @@ public class AppUser {
 
     public void setStatus(UserStatus status) {
         this.status = status;
+    }
+
+    public SystemRole getSystemRole() {
+        return systemRole;
+    }
+
+    public void setSystemRole(SystemRole systemRole) {
+        this.systemRole = systemRole;
     }
 }

@@ -13,12 +13,12 @@ class CompanyMapperTest {
     @Test
     void mapsActiveAndContractorInvoiceGstEnabledInDtoFieldOrder() {
         Company company = new Company();
-        company.setActive(true);
-        company.setContractorInvoiceGstEnabled(false);
+        company.setActive(false);
+        company.setContractorInvoiceGstEnabled(true);
 
         CompanyResponseDTO response = CompanyMapper.toResponseDTO(company);
 
-        assertTrue(response.active());
-        assertFalse(response.contractorInvoiceGstEnabled());
+        assertFalse(response.active());
+        assertTrue(response.contractorInvoiceGstEnabled());
     }
 }
