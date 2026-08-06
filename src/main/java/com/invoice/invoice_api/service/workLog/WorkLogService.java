@@ -3,6 +3,9 @@ package com.invoice.invoice_api.service.workLog;
 import com.invoice.invoice_api.dto.workLog.WorkLogRequestDTO;
 import com.invoice.invoice_api.dto.workLog.WorkLogResponseDTO;
 import com.invoice.invoice_api.enums.WorkLogStatus;
+import com.invoice.invoice_api.enums.CompanyRole;
+import com.invoice.invoice_api.enums.MembershipStatus;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.WorkLogMapper;
 import com.invoice.invoice_api.mapper.WorkLogRequestMapper;
@@ -13,6 +16,8 @@ import com.invoice.invoice_api.model.embeddable.workLog.WorkLogFinancialSnapshot
 import com.invoice.invoice_api.repository.ProjectPositionRepository;
 import com.invoice.invoice_api.repository.WorkLogRepository;
 import com.invoice.invoice_api.repository.WorkerProfileRepository;
+import com.invoice.invoice_api.repository.CompanyMembershipRepository;
+import com.invoice.invoice_api.security.AuthenticatedUserService;
 import com.invoice.invoice_api.security.CompanyContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +30,8 @@ public class WorkLogService {
 
     private final WorkLogRepository workLogRepository;
     private final WorkerProfileRepository workerProfileRepository;
+    private final CompanyMembershipRepository membershipRepository;
+    private final AuthenticatedUserService authenticatedUserService;
     private final ProjectPositionRepository projectPositionRepository;
     private final CompanyContext companyContext;
     private final WorkLogRequestMapper workLogRequestMapper;
@@ -34,6 +41,8 @@ public class WorkLogService {
     public WorkLogService(
             WorkLogRepository workLogRepository,
             WorkerProfileRepository workerProfileRepository,
+            CompanyMembershipRepository membershipRepository,
+            AuthenticatedUserService authenticatedUserService,
             ProjectPositionRepository projectPositionRepository,
             CompanyContext companyContext,
             WorkLogRequestMapper workLogRequestMapper,
@@ -42,6 +51,8 @@ public class WorkLogService {
     ) {
         this.workLogRepository = workLogRepository;
         this.workerProfileRepository = workerProfileRepository;
+        this.membershipRepository = membershipRepository;
+        this.authenticatedUserService = authenticatedUserService;
         this.projectPositionRepository = projectPositionRepository;
         this.companyContext = companyContext;
         this.workLogRequestMapper = workLogRequestMapper;
@@ -65,9 +76,12 @@ public class WorkLogService {
         workLogValidator.validateRequest(request);
 
         WorkerProfile workerProfile =
-                findWorkerProfile(
-                        request.workerProfileId()
+                findWorkerProfileInCompany(
+                        request.workerProfileId(),
+                        companyId
                 );
+        requireWorkerSelf(workerProfile);
+        requireActiveSelfMembership(workerProfile, companyId);
 
         ProjectPosition projectPosition =
                 findProjectPosition(
@@ -87,6 +101,9 @@ public class WorkLogService {
                 projectPosition.getId(),
                 request.workDate()
         );
+
+        workLogValidator.validateNoActiveDuplicate(workLogRepository.existsByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNot(
+                workerProfile.getId(), projectPosition.getId(), request.workDate(), WorkLogStatus.CANCELLED));
 
         WorkLog workLog = new WorkLog();
 
@@ -125,6 +142,8 @@ public class WorkLogService {
                         companyId
                 );
 
+        authorizeRead(workLog.getWorkerProfile());
+
         return WorkLogMapper.toResponseDTO(
                 workLog
         );
@@ -133,6 +152,7 @@ public class WorkLogService {
     @Transactional(readOnly = true)
     public List<WorkLogResponseDTO> findAll() {
         Long companyId = getCurrentCompanyId();
+        requireReviewReader();
 
         return workLogRepository
                 .findAllByProjectPositionProjectCompanyIdOrderByWorkDateDesc(
@@ -148,6 +168,7 @@ public class WorkLogService {
             WorkLogStatus status
     ) {
         Long companyId = getCurrentCompanyId();
+        requireReviewReader();
 
         return workLogRepository
                 .findAllByProjectPositionProjectCompanyIdAndStatusOrderByWorkDateDesc(
@@ -165,7 +186,7 @@ public class WorkLogService {
     ) {
         Long companyId = getCurrentCompanyId();
 
-        findWorkerProfile(workerProfileId);
+        authorizeWorkerQuery(workerProfileId);
 
         return workLogRepository
                 .findAllByWorkerProfileIdAndProjectPositionProjectCompanyIdOrderByWorkDateDesc(
@@ -184,7 +205,7 @@ public class WorkLogService {
     ) {
         Long companyId = getCurrentCompanyId();
 
-        findWorkerProfile(workerProfileId);
+        authorizeWorkerQuery(workerProfileId);
 
         return workLogRepository
                 .findAllByWorkerProfileIdAndProjectPositionProjectCompanyIdAndStatusOrderByWorkDateDesc(
@@ -202,6 +223,7 @@ public class WorkLogService {
             Long projectId
     ) {
         Long companyId = getCurrentCompanyId();
+        requireReviewReader();
 
         return workLogRepository
                 .findAllByProjectPositionProjectIdAndProjectPositionProjectCompanyIdOrderByWorkDateDesc(
@@ -219,6 +241,7 @@ public class WorkLogService {
             WorkLogStatus status
     ) {
         Long companyId = getCurrentCompanyId();
+        requireReviewReader();
 
         return workLogRepository
                 .findAllByProjectPositionProjectIdAndProjectPositionProjectCompanyIdAndStatusOrderByWorkDateDesc(
@@ -244,7 +267,7 @@ public class WorkLogService {
                 endDate
         );
 
-        findWorkerProfile(workerProfileId);
+        authorizeWorkerQuery(workerProfileId);
 
         return workLogRepository
                 .findAllByWorkerProfileIdAndWorkDateBetweenAndProjectPositionProjectCompanyIdOrderByWorkDateAsc(
@@ -272,7 +295,7 @@ public class WorkLogService {
                 endDate
         );
 
-        findWorkerProfile(workerProfileId);
+        authorizeWorkerQuery(workerProfileId);
 
         return workLogRepository
                 .findAllByWorkerProfileIdAndWorkDateBetweenAndProjectPositionProjectCompanyIdAndStatusOrderByWorkDateAsc(
@@ -313,9 +336,12 @@ public class WorkLogService {
         );
 
         WorkerProfile workerProfile =
-                findWorkerProfile(
-                        request.workerProfileId()
+                findWorkerProfileInCompany(
+                        request.workerProfileId(),
+                        companyId
                 );
+        requireWorkerSelf(workerProfile);
+        requireActiveSelfMembership(workerProfile, companyId);
 
         ProjectPosition projectPosition =
                 findProjectPosition(
@@ -335,6 +361,9 @@ public class WorkLogService {
                 projectPosition.getId(),
                 request.workDate()
         );
+
+        workLogValidator.validateNoActiveDuplicate(workLogRepository.existsActiveDuplicateExceptId(
+                workerProfile.getId(), projectPosition.getId(), request.workDate(), WorkLogStatus.CANCELLED, id));
 
         workLogRequestMapper.apply(
                 workLog,
@@ -369,6 +398,7 @@ public class WorkLogService {
             Long workLogId
     ) {
         Long companyId = getCurrentCompanyId();
+        requireReviewer();
 
         WorkLog workLog =
                 findWorkLog(
@@ -420,6 +450,7 @@ public class WorkLogService {
             String rejectionReason
     ) {
         Long companyId = getCurrentCompanyId();
+        requireReviewer();
 
         WorkLog workLog =
                 findWorkLog(
@@ -461,6 +492,7 @@ public class WorkLogService {
                         workLogId,
                         companyId
                 );
+        authorizeMutation(workLog.getWorkerProfile());
 
         workLogValidator.validateCanBeCancelled(
                 workLog
@@ -487,6 +519,7 @@ public class WorkLogService {
                         workLogId,
                         companyId
                 );
+        authorizeMutation(workLog.getWorkerProfile());
 
         workLogValidator.validateCanBeReopened(
                 workLog
@@ -581,6 +614,100 @@ public class WorkLogService {
                                         + workerProfileId
                         )
                 );
+    }
+
+    private WorkerProfile findWorkerProfileInCompany(
+            Long workerProfileId,
+            Long companyId
+    ) {
+        WorkerProfile profile = findWorkerProfile(workerProfileId);
+        membershipRepository
+                .findByAppUserIdAndCompanyId(
+                        profile.getAppUser().getId(),
+                        companyId
+                )
+                .filter(membership ->
+                        (membership.getRole() == CompanyRole.WORKER
+                                || membership.getRole() == CompanyRole.OWNER
+                                || membership.getRole() == CompanyRole.ADMIN
+                                || membership.getRole() == CompanyRole.MANAGER
+                                || membership.getRole() == CompanyRole.FINANCE)
+                                && (membership.getStatus()
+                                == MembershipStatus.ACTIVE
+                                || membership.getStatus()
+                                == MembershipStatus.SUSPENDED)
+                )
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Worker profile not found in this company"
+                ));
+        return profile;
+    }
+
+    private void requireWorkerSelf(WorkerProfile profile) {
+        if (companyContext.getRole() == null
+                || !isSelfWorkLogRole(companyContext.getRole())
+                || !profile.getAppUser().getId().equals(
+                authenticatedUserService.getCurrentUserId()
+        )) {
+            throw new AccessDeniedBusinessException(
+                    "Workers can only manage their own work logs"
+            );
+        }
+    }
+
+    private boolean isSelfWorkLogRole(CompanyRole role) {
+        return role == CompanyRole.WORKER || role == CompanyRole.OWNER || role == CompanyRole.ADMIN
+                || role == CompanyRole.MANAGER || role == CompanyRole.FINANCE;
+    }
+
+    private void requireActiveSelfMembership(WorkerProfile profile, Long companyId) {
+        membershipRepository.findByAppUserIdAndCompanyId(profile.getAppUser().getId(), companyId)
+                .filter(membership -> membership.getStatus() == MembershipStatus.ACTIVE)
+                .orElseThrow(() -> new AccessDeniedBusinessException("An active company membership is required to submit work logs."));
+    }
+
+    private void authorizeWorkerQuery(Long workerProfileId) {
+        WorkerProfile profile = findWorkerProfileInCompany(
+                workerProfileId,
+                getCurrentCompanyId()
+        );
+        if (companyContext.getRole() == CompanyRole.WORKER) {
+            requireWorkerSelf(profile);
+        } else {
+            requireReviewReader();
+        }
+    }
+
+    private void authorizeRead(WorkerProfile profile) {
+        if (companyContext.getRole() == CompanyRole.WORKER) {
+            requireWorkerSelf(profile);
+        } else {
+            requireReviewReader();
+        }
+    }
+
+    private void authorizeMutation(WorkerProfile profile) {
+        if (companyContext.getRole() == CompanyRole.WORKER) {
+            requireWorkerSelf(profile);
+        } else {
+            requireReviewer();
+        }
+    }
+
+    private void requireReviewReader() {
+        CompanyRole role = companyContext.getRole();
+        if (role != CompanyRole.OWNER
+                && role != CompanyRole.ADMIN
+                && role != CompanyRole.MANAGER
+                && role != CompanyRole.FINANCE) {
+            throw new AccessDeniedBusinessException(
+                    "This work-log view is restricted to company reviewers"
+            );
+        }
+    }
+
+    private void requireReviewer() {
+        requireReviewReader();
     }
 
     private ProjectPosition findProjectPosition(

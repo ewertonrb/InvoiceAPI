@@ -85,9 +85,9 @@ public class CompanyMapper {
 
                 company.getAddress(),
 
-                company.getContractorInvoiceGstEnabled(),
-
                 company.getActive(),
+
+                company.getContractorInvoiceGstEnabled(),
 
                 company.getCreatedAt(),
 

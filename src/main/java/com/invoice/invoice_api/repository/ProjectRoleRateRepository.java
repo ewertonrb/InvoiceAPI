@@ -1,7 +1,9 @@
 package com.invoice.invoice_api.repository;
 
 import com.invoice.invoice_api.model.ProjectRoleRate;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -17,10 +19,35 @@ public interface ProjectRoleRateRepository extends JpaRepository<ProjectRoleRate
             Long companyId
     );
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT rate
+            FROM ProjectRoleRate rate
+            WHERE rate.id = :rateId
+              AND rate.projectPosition.project.company.id = :companyId
+            """)
+    Optional<ProjectRoleRate> findByIdAndCompanyIdForUpdate(
+            @Param("rateId") Long rateId,
+            @Param("companyId") Long companyId
+    );
+
     List<ProjectRoleRate>
     findAllByProjectPositionIdAndProjectPositionProjectCompanyIdOrderByEffectiveFromDesc(
             Long projectPositionId,
             Long companyId
+    );
+
+    boolean existsByProjectPositionIdAndProjectPositionProjectCompanyIdAndEffectiveFrom(
+            Long projectPositionId,
+            Long companyId,
+            LocalDate effectiveFrom
+    );
+
+    boolean existsByProjectPositionIdAndProjectPositionProjectCompanyIdAndEffectiveFromAndIdNot(
+            Long projectPositionId,
+            Long companyId,
+            LocalDate effectiveFrom,
+            Long id
     );
 
     @Query("""

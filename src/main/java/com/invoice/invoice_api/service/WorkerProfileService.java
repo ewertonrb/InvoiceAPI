@@ -1,6 +1,7 @@
 package com.invoice.invoice_api.service;
 
 
+import com.invoice.invoice_api.dto.workerProfile.WorkerProfileAdminResponseDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileRequestDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileResponseDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileSummaryDTO;
@@ -21,10 +22,15 @@ import com.invoice.invoice_api.model.embeddable.SuperDetails;
 import com.invoice.invoice_api.repository.CompanyMembershipRepository;
 import com.invoice.invoice_api.repository.WorkerProfileRepository;
 import com.invoice.invoice_api.security.AuthenticatedUserService;
+import com.invoice.invoice_api.security.CompanyContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class WorkerProfileService {
@@ -33,17 +39,20 @@ public class WorkerProfileService {
     private final CompanyMembershipRepository membershipRepository;
     private final AuthenticatedUserService authenticatedUserService;
     private final WorkerProfileValidator workerProfileValidator;
+    private final CompanyContext companyContext;
 
     public WorkerProfileService(
             WorkerProfileRepository workerProfileRepository,
             CompanyMembershipRepository membershipRepository,
             AuthenticatedUserService authenticatedUserService,
-            WorkerProfileValidator workerProfileValidator
+            WorkerProfileValidator workerProfileValidator,
+            CompanyContext companyContext
     ) {
         this.workerProfileRepository = workerProfileRepository;
         this.membershipRepository = membershipRepository;
         this.authenticatedUserService = authenticatedUserService;
         this.workerProfileValidator = workerProfileValidator;
+        this.companyContext = companyContext;
     }
 
     /*
@@ -54,6 +63,7 @@ public class WorkerProfileService {
 
     @Transactional(readOnly = true)
     public WorkerProfileResponseDTO findCurrentProfile() {
+        validateCurrentUserCanSelfManageProfile();
 
         WorkerProfile workerProfile =
                 findCurrentWorkerProfileEntity();
@@ -67,6 +77,7 @@ public class WorkerProfileService {
     public WorkerProfileResponseDTO updateCurrentProfile(
             WorkerProfileRequestDTO request
     ) {
+        validateCurrentUserCanSelfManageProfile();
         WorkerProfile workerProfile =
                 findCurrentWorkerProfileEntity();
 
@@ -118,7 +129,7 @@ public class WorkerProfileService {
      */
 
     @Transactional(readOnly = true)
-    public WorkerProfileResponseDTO findById(
+    public WorkerProfileAdminResponseDTO findById(
             Long companyId,
             Long workerProfileId
     ) {
@@ -129,13 +140,14 @@ public class WorkerProfileService {
         WorkerProfile workerProfile =
                 findEntityById(workerProfileId);
 
-        validateWorkerBelongsToCompany(
+        CompanyMembership membership = validateWorkerBelongsToCompany(
                 workerProfile,
                 companyId
         );
 
-        return WorkerProfileMapper.toResponseDTO(
-                workerProfile
+        return WorkerProfileMapper.toAdminResponseDTO(
+                workerProfile,
+                membership
         );
     }
 
@@ -143,14 +155,69 @@ public class WorkerProfileService {
     public List<WorkerProfileSummaryDTO> findActiveWorkersByCompany(
             Long companyId
     ) {
+        return findWorkersByCompany(
+                companyId,
+                true,
+                null
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public List<WorkerProfileSummaryDTO> findWorkersByCompany(
+            Long companyId,
+            boolean activeOnly,
+            MembershipStatus status
+    ) {
         validateCurrentUserCanManageWorkers(
                 companyId
         );
 
+        List<MembershipStatus> statuses = status != null
+                ? List.of(status)
+                : activeOnly
+                ? List.of(MembershipStatus.ACTIVE)
+                : List.of(
+                        MembershipStatus.ACTIVE,
+                        MembershipStatus.SUSPENDED
+                );
+
+        Map<Long, CompanyMembership> membershipsByUserId =
+                membershipRepository
+                        .findByCompanyIdAndStatusIn(
+                                companyId,
+                                statuses
+                        )
+                        .stream()
+                        .filter(membership ->
+                                membership.getRole()
+                                        == CompanyRole.WORKER
+                        )
+                        .collect(Collectors.toMap(
+                                membership -> membership
+                                        .getAppUser()
+                                        .getId(),
+                                Function.identity()
+                        ));
+
         return workerProfileRepository
-                .findActiveWorkersByCompanyId(companyId)
+                .findWorkersByCompanyIdAndMembershipStatuses(
+                        companyId,
+                        statuses
+                )
                 .stream()
-                .map(WorkerProfileMapper::toSummaryDTO)
+                .map(workerProfile -> {
+                    CompanyMembership membership =
+                            membershipsByUserId.get(
+                                    workerProfile
+                                            .getAppUser()
+                                            .getId()
+                            );
+
+                    return WorkerProfileMapper.toSummaryDTO(
+                            workerProfile,
+                            membership
+                    );
+                })
                 .toList();
     }
 
@@ -161,7 +228,7 @@ public class WorkerProfileService {
      */
 
     @Transactional
-    public WorkerProfileResponseDTO suspend(
+    public WorkerProfileAdminResponseDTO suspend(
             Long companyId,
             Long workerProfileId
     ) {
@@ -170,33 +237,50 @@ public class WorkerProfileService {
         );
 
         WorkerProfile workerProfile =
-                findEntityById(workerProfileId);
+                lockWorkerProfileById(workerProfileId);
 
-        validateWorkerBelongsToCompany(
+        CompanyMembership workerMembership = validateWorkerBelongsToCompany(
                 workerProfile,
                 companyId
         );
 
         if (
-                workerProfile.getStatus()
-                        == WorkerProfileStatus.SUSPENDED
+                workerMembership.getStatus()
+                        == MembershipStatus.SUSPENDED
         ) {
             throw new InvalidOperationException(
-                    "Worker profile is already suspended."
+                    "Worker membership is already suspended."
             );
         }
 
-        workerProfile.setStatus(
-                WorkerProfileStatus.SUSPENDED
-        );
+        if (workerMembership.getStatus()
+                != MembershipStatus.ACTIVE) {
+            throw new InvalidOperationException(
+                    "Only active worker memberships can be suspended."
+            );
+        }
+
+        workerMembership.setStatus(MembershipStatus.SUSPENDED);
+        workerMembership.setSuspendedAt(LocalDateTime.now());
+        membershipRepository.save(workerMembership);
+
+        if (!hasAnotherActiveWorkerMembership(
+                workerProfile,
+                companyId
+        )) {
+            workerProfile.setStatus(
+                    WorkerProfileStatus.SUSPENDED
+            );
+        }
 
         WorkerProfile savedWorkerProfile =
                 workerProfileRepository.save(
                         workerProfile
                 );
 
-        return WorkerProfileMapper.toResponseDTO(
-                savedWorkerProfile
+        return WorkerProfileMapper.toAdminResponseDTO(
+                savedWorkerProfile,
+                workerMembership
         );
     }
 
@@ -207,7 +291,7 @@ public class WorkerProfileService {
      */
 
     @Transactional
-    public WorkerProfileResponseDTO reactivate(
+    public WorkerProfileAdminResponseDTO reactivate(
             Long companyId,
             Long workerProfileId
     ) {
@@ -216,21 +300,25 @@ public class WorkerProfileService {
         );
 
         WorkerProfile workerProfile =
-                findEntityById(workerProfileId);
+                lockWorkerProfileById(workerProfileId);
 
-        validateWorkerBelongsToCompany(
+        CompanyMembership workerMembership = validateWorkerBelongsToCompany(
                 workerProfile,
                 companyId
         );
 
         if (
-                workerProfile.getStatus()
-                        != WorkerProfileStatus.SUSPENDED
+                workerMembership.getStatus()
+                        != MembershipStatus.SUSPENDED
         ) {
             throw new InvalidOperationException(
-                    "Only suspended worker profiles can be reactivated."
+                    "Only suspended worker memberships can be reactivated."
             );
         }
+
+        workerMembership.setStatus(MembershipStatus.ACTIVE);
+        workerMembership.setSuspendedAt(null);
+        membershipRepository.save(workerMembership);
 
         WorkerProfileRules.updateCompletionStatus(
                 workerProfile
@@ -241,8 +329,9 @@ public class WorkerProfileService {
                         workerProfile
                 );
 
-        return WorkerProfileMapper.toResponseDTO(
-                savedWorkerProfile
+        return WorkerProfileMapper.toAdminResponseDTO(
+                savedWorkerProfile,
+                workerMembership
         );
     }
 
@@ -257,16 +346,11 @@ public class WorkerProfileService {
         AppUser currentUser =
                 authenticatedUserService.getCurrentUser();
 
-        return workerProfileRepository
-                .findByAppUserId(
-                        currentUser.getId()
-                )
-                .orElseThrow(() ->
-                        new ResourceNotFoundException(
-                                "Worker profile was not found "
-                                        + "for the current user."
-                        )
-                );
+        return workerProfileRepository.findByAppUserId(currentUser.getId()).orElseGet(() -> {
+            WorkerProfile profile = new WorkerProfile();
+            profile.setAppUser(currentUser);
+            return workerProfileRepository.save(profile);
+        });
     }
 
     private WorkerProfile findEntityById(
@@ -274,6 +358,19 @@ public class WorkerProfileService {
     ) {
         return workerProfileRepository
                 .findById(workerProfileId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Worker profile not found with ID: "
+                                        + workerProfileId
+                        )
+                );
+    }
+
+    private WorkerProfile lockWorkerProfileById(
+            Long workerProfileId
+    ) {
+        return workerProfileRepository
+                .findByIdForUpdate(workerProfileId)
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Worker profile not found with ID: "
@@ -291,6 +388,8 @@ public class WorkerProfileService {
     private void validateCurrentUserCanManageWorkers(
             Long companyId
     ) {
+        validateSelectedCompany(companyId);
+
         AppUser currentUser =
                 authenticatedUserService.getCurrentUser();
 
@@ -332,13 +431,26 @@ public class WorkerProfileService {
         }
     }
 
+    private void validateCurrentUserCanSelfManageProfile() {
+        CompanyRole role = companyContext.getRole();
+        if (role == null || (role != CompanyRole.WORKER && role != CompanyRole.OWNER && role != CompanyRole.ADMIN && role != CompanyRole.MANAGER && role != CompanyRole.FINANCE)) throw new AccessDeniedBusinessException("Only active company members can access profile self-service.");
+    }
+
+    private void validateSelectedCompany(Long companyId) {
+        if (!companyId.equals(companyContext.getCompanyId())) {
+            throw new AccessDeniedBusinessException(
+                    "The selected company does not match the requested company."
+            );
+        }
+    }
+
     /*
      * ============================================================
      * COMPANY VALIDATION
      * ============================================================
      */
 
-    private void validateWorkerBelongsToCompany(
+    private CompanyMembership validateWorkerBelongsToCompany(
             WorkerProfile workerProfile,
             Long companyId
     ) {
@@ -366,5 +478,25 @@ public class WorkerProfileService {
                             + "in this company."
             );
         }
+
+        return membership;
+    }
+
+    private boolean hasAnotherActiveWorkerMembership(
+            WorkerProfile workerProfile,
+            Long currentCompanyId
+    ) {
+        return membershipRepository
+                .findByAppUserId(
+                        workerProfile.getAppUser().getId()
+                )
+                .stream()
+                .anyMatch(membership ->
+                        membership.getRole() == CompanyRole.WORKER
+                                && membership.getStatus()
+                                == MembershipStatus.ACTIVE
+                                && !membership.getCompany().getId()
+                                .equals(currentCompanyId)
+                );
     }
 }

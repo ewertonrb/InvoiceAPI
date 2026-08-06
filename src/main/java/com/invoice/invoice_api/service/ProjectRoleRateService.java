@@ -3,8 +3,10 @@ package com.invoice.invoice_api.service;
 import com.invoice.invoice_api.dto.projectRoleRate.ProjectRoleRateRequestDTO;
 import com.invoice.invoice_api.dto.projectRoleRate.ProjectRoleRateResponseDTO;
 import com.invoice.invoice_api.dto.projectRoleRateItemRequestDTO.ProjectRoleRateItemRequestDTO;
+import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.enums.RateCalculationType;
 import com.invoice.invoice_api.enums.RateType;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.ProjectRoleRateMapper;
@@ -21,7 +23,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class ProjectRoleRateService {
@@ -43,15 +48,24 @@ public class ProjectRoleRateService {
     public ProjectRoleRateResponseDTO create(
             ProjectRoleRateRequestDTO request
     ) {
+        requireRateManager();
         Long companyId = getCurrentCompanyId();
 
         validateRequest(request);
 
         ProjectPosition position =
-                findPositionInCurrentCompany(
+                lockPositionInCurrentCompany(
                         request.projectPositionId(),
                         companyId
                 );
+        requireActivePositionAndProject(position);
+
+        validateDuplicateEffectiveFrom(
+                position.getId(),
+                request.effectiveFrom(),
+                null,
+                companyId
+        );
 
         validateOverlappingPeriod(
                 position.getId(),
@@ -117,21 +131,30 @@ public class ProjectRoleRateService {
             Long id,
             ProjectRoleRateRequestDTO request
     ) {
+        requireRateManager();
         Long companyId = getCurrentCompanyId();
 
         validateRequest(request);
 
         ProjectRoleRate rate =
-                findEntityByIdAndCompany(
+                lockRateByIdAndCompany(
                         id,
                         companyId
                 );
 
-        ProjectPosition position =
-                findPositionInCurrentCompany(
-                        request.projectPositionId(),
-                        companyId
-                );
+        ProjectPosition position = lockPositionsForUpdate(
+                rate.getProjectPosition().getId(),
+                request.projectPositionId(),
+                companyId
+        );
+        requireActivePositionAndProject(position);
+
+        validateDuplicateEffectiveFrom(
+                position.getId(),
+                request.effectiveFrom(),
+                id,
+                companyId
+        );
 
         validateOverlappingPeriod(
                 position.getId(),
@@ -152,26 +175,39 @@ public class ProjectRoleRateService {
 
     @Transactional
     public void deactivate(Long id) {
+        requireRateManager();
         Long companyId = getCurrentCompanyId();
 
         ProjectRoleRate rate =
-                findEntityByIdAndCompany(
+                lockRateByIdAndCompany(
                         id,
                         companyId
                 );
+        lockPositionInCurrentCompany(
+                rate.getProjectPosition().getId(),
+                companyId
+        );
 
         rate.setActive(false);
     }
 
     @Transactional
     public ProjectRoleRateResponseDTO reactivate(Long id) {
+        requireRateManager();
         Long companyId = getCurrentCompanyId();
 
         ProjectRoleRate rate =
-                findEntityByIdAndCompany(
+                lockRateByIdAndCompany(
                         id,
                         companyId
                 );
+        lockPositionInCurrentCompany(
+                rate.getProjectPosition().getId(),
+                companyId
+        );
+        requireActivePositionAndProject(
+                rate.getProjectPosition()
+        );
 
         validateOverlappingPeriod(
                 rate.getProjectPosition().getId(),
@@ -201,15 +237,37 @@ public class ProjectRoleRateService {
             ProjectRoleRate rate,
             List<ProjectRoleRateItemRequestDTO> itemRequests
     ) {
-        rate.clearItems();
+        Map<RateType, ProjectRoleRateItem> existingItems =
+                rate.getItems().stream()
+                        .collect(Collectors.toMap(
+                                ProjectRoleRateItem::getRateType,
+                                Function.identity()
+                        ));
+
+        Set<RateType> requestedTypes = itemRequests.stream()
+                .map(ProjectRoleRateItemRequestDTO::rateType)
+                .collect(Collectors.toSet());
+
+        rate.getItems().stream()
+                .filter(item -> !requestedTypes.contains(
+                        item.getRateType()
+                ))
+                .toList()
+                .forEach(rate::removeItem);
 
         for (ProjectRoleRateItemRequestDTO itemRequest
                 : itemRequests) {
 
-            ProjectRoleRateItem item =
-                    new ProjectRoleRateItem();
+            ProjectRoleRateItem item = existingItems.get(
+                    itemRequest.rateType()
+            );
 
-            item.setRateType(itemRequest.rateType());
+            if (item == null) {
+                item = new ProjectRoleRateItem();
+                item.setRateType(itemRequest.rateType());
+                rate.addItem(item);
+            }
+
             item.setCalculationType(
                     itemRequest.calculationType()
             );
@@ -220,14 +278,18 @@ public class ProjectRoleRateService {
                     )
             );
             item.setActive(true);
-
-            rate.addItem(item);
         }
     }
 
     private void validateRateItems(
             List<ProjectRoleRateItemRequestDTO> items
     ) {
+        if (items == null || items.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "At least one rate item is required"
+            );
+        }
+
         validateDuplicateRateTypes(items);
         validateRequiredRegularRate(items);
 
@@ -370,6 +432,12 @@ public class ProjectRoleRateService {
             LocalDate effectiveFrom,
             LocalDate effectiveTo
     ) {
+        if (effectiveFrom == null) {
+            throw new IllegalArgumentException(
+                    "Effective from date is required"
+            );
+        }
+
         if (
                 effectiveTo != null
                         && effectiveTo.isBefore(effectiveFrom)
@@ -417,16 +485,133 @@ public class ProjectRoleRateService {
                 );
     }
 
-    private Long getCurrentCompanyId() {
-        Long companyId = companyContext.getCompanyId();
+    private ProjectPosition lockPositionInCurrentCompany(
+            Long positionId,
+            Long companyId
+    ) {
+        return positionRepository
+                .findByIdAndCompanyIdForUpdate(
+                        positionId,
+                        companyId
+                )
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Project position not found with ID: "
+                                        + positionId
+                        )
+                );
+    }
 
-        if (companyId == null) {
-            throw new IllegalStateException(
-                    "No company is selected in the current context"
+    private ProjectPosition lockPositionsForUpdate(
+            Long currentPositionId,
+            Long requestedPositionId,
+            Long companyId
+    ) {
+        Long firstId = Math.min(
+                currentPositionId,
+                requestedPositionId
+        );
+        Long secondId = Math.max(
+                currentPositionId,
+                requestedPositionId
+        );
+
+        ProjectPosition first = lockPositionInCurrentCompany(
+                firstId,
+                companyId
+        );
+
+        if (firstId.equals(secondId)) {
+            return first;
+        }
+
+        ProjectPosition second = lockPositionInCurrentCompany(
+                secondId,
+                companyId
+        );
+
+        return requestedPositionId.equals(firstId)
+                ? first
+                : second;
+    }
+
+    private ProjectRoleRate lockRateByIdAndCompany(
+            Long rateId,
+            Long companyId
+    ) {
+        return rateRepository
+                .findByIdAndCompanyIdForUpdate(
+                        rateId,
+                        companyId
+                )
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Project role rate not found with ID: "
+                                        + rateId
+                        )
+                );
+    }
+
+    private Long getCurrentCompanyId() {
+        return companyContext.getCompanyId();
+    }
+
+    private void validateDuplicateEffectiveFrom(
+            Long positionId,
+            LocalDate effectiveFrom,
+            Long currentRateId,
+            Long companyId
+    ) {
+        boolean duplicateExists = currentRateId == null
+                ? rateRepository
+                .existsByProjectPositionIdAndProjectPositionProjectCompanyIdAndEffectiveFrom(
+                        positionId,
+                        companyId,
+                        effectiveFrom
+                )
+                : rateRepository
+                .existsByProjectPositionIdAndProjectPositionProjectCompanyIdAndEffectiveFromAndIdNot(
+                        positionId,
+                        companyId,
+                        effectiveFrom,
+                        currentRateId
+                );
+
+        if (duplicateExists) {
+            throw new DuplicateResourceException(
+                    "A rate already exists for this position with the same effective-from date"
+            );
+        }
+    }
+
+    private void requireRateManager() {
+        CompanyRole role = companyContext.getRole();
+
+        if (role != CompanyRole.OWNER
+                && role != CompanyRole.ADMIN
+                && role != CompanyRole.MANAGER) {
+            throw new AccessDeniedBusinessException(
+                    "Only company owners, administrators and managers can manage rates"
+            );
+        }
+    }
+
+    private void requireActivePositionAndProject(
+            ProjectPosition position
+    ) {
+        if (!Boolean.TRUE.equals(position.getActive())) {
+            throw new AccessDeniedBusinessException(
+                    "Rates cannot be assigned to an inactive project position"
             );
         }
 
-        return companyId;
+        if (!Boolean.TRUE.equals(
+                position.getProject().getActive()
+        )) {
+            throw new AccessDeniedBusinessException(
+                    "Rates cannot be assigned to a position in an inactive project"
+            );
+        }
     }
 
     private String normalizeOptionalText(String value) {

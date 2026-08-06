@@ -2,6 +2,8 @@ package com.invoice.invoice_api.service;
 
 import com.invoice.invoice_api.dto.project.ProjectRequestDTO;
 import com.invoice.invoice_api.dto.project.ProjectResponseDTO;
+import com.invoice.invoice_api.enums.CompanyRole;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.ProjectMapper;
@@ -36,6 +38,7 @@ public class ProjectService {
     public ProjectResponseDTO create(
             ProjectRequestDTO request
     ) {
+        requireProjectManager();
         Long companyId = companyContext.getCompanyId();
 
         String normalizedName =
@@ -48,6 +51,12 @@ public class ProjectService {
         );
 
         Company company = findCurrentCompany(companyId);
+
+        if (!Boolean.TRUE.equals(company.getActive())) {
+            throw new AccessDeniedBusinessException(
+                    "Projects cannot be created for an inactive company"
+            );
+        }
 
         Project project = new Project();
 
@@ -100,6 +109,7 @@ public class ProjectService {
             Long id,
             ProjectRequestDTO request
     ) {
+        requireProjectManager();
         Long companyId = companyContext.getCompanyId();
 
         Project project = findEntityByIdAndCompany(
@@ -126,6 +136,7 @@ public class ProjectService {
 
     @Transactional
     public void deactivate(Long id) {
+        requireProjectManager();
         Long companyId = companyContext.getCompanyId();
 
         Project project = findEntityByIdAndCompany(
@@ -140,6 +151,7 @@ public class ProjectService {
 
     @Transactional
     public ProjectResponseDTO reactivate(Long id) {
+        requireProjectManager();
         Long companyId = companyContext.getCompanyId();
 
         Project project = findEntityByIdAndCompany(
@@ -206,6 +218,18 @@ public class ProjectService {
 
     private String normalizeRequiredText(String value) {
         return value.trim();
+    }
+
+    private void requireProjectManager() {
+        CompanyRole role = companyContext.getRole();
+
+        if (role != CompanyRole.OWNER
+                && role != CompanyRole.ADMIN
+                && role != CompanyRole.MANAGER) {
+            throw new AccessDeniedBusinessException(
+                    "Only company owners, administrators and managers can manage projects"
+            );
+        }
     }
 
 }

@@ -3,6 +3,8 @@ package com.invoice.invoice_api.service;
 
 import com.invoice.invoice_api.dto.projectPosition.ProjectPositionRequestDTO;
 import com.invoice.invoice_api.dto.projectPosition.ProjectPositionResponseDTO;
+import com.invoice.invoice_api.enums.CompanyRole;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.ProjectPositionMapper;
@@ -13,7 +15,6 @@ import com.invoice.invoice_api.repository.ProjectRepository;
 import com.invoice.invoice_api.security.CompanyContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -38,12 +39,14 @@ public class ProjectPositionService {
     public ProjectPositionResponseDTO create(
             ProjectPositionRequestDTO request
     ) {
+        requirePositionManager();
         Long companyId = getCurrentCompanyId();
 
         Project project = findProjectInCurrentCompany(
                 request.projectId(),
                 companyId
         );
+        requireActiveProject(project);
 
         String normalizedPositionName =
                 normalizeRequiredText(request.positionName());
@@ -90,7 +93,7 @@ public class ProjectPositionService {
 
         if (activeOnly) {
             positions = projectPositionRepository
-                    .findAllByProjectIdAndProjectCompanyIdAndActiveTrueOrderByPositionNameAsc(
+                    .findAllByProjectIdAndProjectCompanyIdAndActiveTrueAndProjectActiveTrueOrderByPositionNameAsc(
                             projectId,
                             companyId
                     );
@@ -112,6 +115,7 @@ public class ProjectPositionService {
             Long id,
             ProjectPositionRequestDTO request
     ) {
+        requirePositionManager();
         Long companyId = getCurrentCompanyId();
 
         ProjectPosition position =
@@ -121,6 +125,7 @@ public class ProjectPositionService {
                 request.projectId(),
                 companyId
         );
+        requireActiveProject(project);
 
         String normalizedPositionName =
                 normalizeRequiredText(request.positionName());
@@ -143,6 +148,7 @@ public class ProjectPositionService {
 
     @Transactional
     public void deactivate(Long id) {
+        requirePositionManager();
         Long companyId = getCurrentCompanyId();
 
         ProjectPosition position =
@@ -153,10 +159,12 @@ public class ProjectPositionService {
 
     @Transactional
     public ProjectPositionResponseDTO reactivate(Long id) {
+        requirePositionManager();
         Long companyId = getCurrentCompanyId();
 
         ProjectPosition position =
                 findEntityByIdAndCompany(id, companyId);
+        requireActiveProject(position.getProject());
 
         position.setActive(true);
 
@@ -234,15 +242,27 @@ public class ProjectPositionService {
     }
 
     private Long getCurrentCompanyId() {
-        Long companyId = companyContext.getCompanyId();
+        return companyContext.getCompanyId();
+    }
 
-        if (companyId == null) {
-            throw new IllegalStateException(
-                    "No company selected in the current context"
+    private void requirePositionManager() {
+        CompanyRole role = companyContext.getRole();
+
+        if (role != CompanyRole.OWNER
+                && role != CompanyRole.ADMIN
+                && role != CompanyRole.MANAGER) {
+            throw new AccessDeniedBusinessException(
+                    "Only company owners, administrators and managers can manage project positions"
             );
         }
+    }
 
-        return companyId;
+    private void requireActiveProject(Project project) {
+        if (!Boolean.TRUE.equals(project.getActive())) {
+            throw new AccessDeniedBusinessException(
+                    "Project positions cannot be assigned to an inactive project"
+            );
+        }
     }
 
     @Transactional(readOnly = true)
@@ -255,7 +275,7 @@ public class ProjectPositionService {
 
         if (activeOnly) {
             positions = projectPositionRepository
-                    .findAllByProjectCompanyIdAndActiveTrueOrderByPositionNameAsc(
+                    .findAllByProjectCompanyIdAndActiveTrueAndProjectActiveTrueOrderByPositionNameAsc(
                             companyId
                     );
         } else {

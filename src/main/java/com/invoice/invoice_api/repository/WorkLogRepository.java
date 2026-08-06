@@ -78,6 +78,9 @@ public interface WorkLogRepository extends JpaRepository<WorkLog, Long> {
             WorkLogStatus excludedStatus
     );
 
+    @Query("select count(w) > 0 from WorkLog w where w.workerProfile.id = :worker and w.projectPosition.id = :position and w.workDate = :date and w.status <> :excluded and w.id <> :id")
+    boolean existsActiveDuplicateExceptId(@Param("worker") Long worker, @Param("position") Long position, @Param("date") LocalDate date, @Param("excluded") WorkLogStatus excluded, @Param("id") Long id);
+
     @Query("""
         SELECT workLog
         FROM WorkLog workLog

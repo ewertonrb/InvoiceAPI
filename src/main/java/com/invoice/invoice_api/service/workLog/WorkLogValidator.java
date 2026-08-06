@@ -102,6 +102,10 @@ public class WorkLogValidator {
         }
     }
 
+    public void validateNoActiveDuplicate(boolean duplicate) {
+        if (duplicate) throw new BusinessException("A work log already exists for this worker, project position, and date.");
+    }
+
     public void validateCanBeApproved(
             WorkLog workLog
     ) {
@@ -147,6 +151,12 @@ public class WorkLogValidator {
     public void validateCanBeReopened(
             WorkLog workLog
     ) {
+        if (workLog.isApproved()) {
+            throw new BusinessException(
+                    "An approved work log cannot be reopened after snapshot creation."
+            );
+        }
+
         if (workLog.isPendingApproval()) {
             throw new BusinessException(
                     "Work log is already pending approval."

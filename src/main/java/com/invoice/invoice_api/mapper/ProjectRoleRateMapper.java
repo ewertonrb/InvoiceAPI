@@ -3,6 +3,8 @@ package com.invoice.invoice_api.mapper;
 import com.invoice.invoice_api.dto.projectRoleRate.ProjectRoleRateResponseDTO;
 import com.invoice.invoice_api.model.*;
 
+import java.util.Comparator;
+
 public class ProjectRoleRateMapper {
     private ProjectRoleRateMapper() {
     }
@@ -38,6 +40,12 @@ public class ProjectRoleRateMapper {
 
                 rate.getItems()
                         .stream()
+                        .sorted(
+                                Comparator.comparingInt(
+                                        ProjectRoleRateMapper
+                                                ::getDisplayOrder
+                                )
+                        )
                         .map(
                                 ProjectRoleRateItemMapper
                                         ::toResponseDTO

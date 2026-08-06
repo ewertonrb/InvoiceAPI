@@ -3,6 +3,7 @@ package com.invoice.invoice_api.dto.projectRoleRateItemRequestDTO;
 import com.invoice.invoice_api.enums.RateCalculationType;
 import com.invoice.invoice_api.enums.RateType;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -19,6 +20,11 @@ public record ProjectRoleRateItemRequestDTO(
         @DecimalMin(
                 value = "0.0001",
                 message = "Rate value must be greater than zero"
+        )
+        @Digits(
+                integer = 8,
+                fraction = 4,
+                message = "Rate value must contain at most 8 integer and 4 decimal digits"
         )
         BigDecimal value,
 

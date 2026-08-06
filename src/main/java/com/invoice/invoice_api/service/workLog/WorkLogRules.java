@@ -19,6 +19,12 @@ public final class WorkLogRules {
     public static void submit(
             WorkLog workLog
     ) {
+        if (workLog.hasFinancialSnapshot()) {
+            throw new IllegalStateException(
+                    "A work log with a financial snapshot is immutable"
+            );
+        }
+
         workLog.setStatus(
                 WorkLogStatus.PENDING_APPROVAL
         );
@@ -29,7 +35,6 @@ public final class WorkLogRules {
 
         clearApprovalData(workLog);
         clearRejectionData(workLog);
-        clearFinancialSnapshot(workLog);
     }
 
     /*
@@ -75,7 +80,6 @@ public final class WorkLogRules {
         );
 
         clearApprovalData(workLog);
-        clearFinancialSnapshot(workLog);
     }
 
     /*
@@ -93,7 +97,6 @@ public final class WorkLogRules {
 
         clearApprovalData(workLog);
         clearRejectionData(workLog);
-        clearFinancialSnapshot(workLog);
     }
 
     /*
@@ -141,9 +144,4 @@ public final class WorkLogRules {
         workLog.setRejectionReason(null);
     }
 
-    private static void clearFinancialSnapshot(
-            WorkLog workLog
-    ) {
-        workLog.setFinancialSnapshot(null);
-    }
 }

@@ -1,8 +1,10 @@
 package com.invoice.invoice_api.repository;
 
-import com.invoice.invoice_api.model.CompanyMembership;
+import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.model.WorkerProfile;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -18,6 +20,12 @@ public interface WorkerProfileRepository extends JpaRepository<WorkerProfile, Lo
     Optional<WorkerProfile> findByIdAndAppUserId(
             Long workerProfileId,
             Long appUserId
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT profile FROM WorkerProfile profile WHERE profile.id = :profileId")
+    Optional<WorkerProfile> findByIdForUpdate(
+            @Param("profileId") Long profileId
     );
 
     boolean existsByAppUserId(
@@ -40,11 +48,12 @@ public interface WorkerProfileRepository extends JpaRepository<WorkerProfile, Lo
                 ON membership.appUser.id = workerProfile.appUser.id
             WHERE membership.company.id = :companyId
               AND membership.role = com.invoice.invoice_api.enums.CompanyRole.WORKER
-              AND membership.status = com.invoice.invoice_api.enums.MembershipStatus.ACTIVE
+              AND membership.status IN :statuses
             ORDER BY workerProfile.appUser.name ASC,
                      workerProfile.appUser.surname ASC
             """)
-    List<WorkerProfile> findActiveWorkersByCompanyId(
-            @Param("companyId") Long companyId
+    List<WorkerProfile> findWorkersByCompanyIdAndMembershipStatuses(
+            @Param("companyId") Long companyId,
+            @Param("statuses") List<MembershipStatus> statuses
     );
 }

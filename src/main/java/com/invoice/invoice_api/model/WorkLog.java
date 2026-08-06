@@ -512,6 +512,13 @@ public class WorkLog {
     public void setFinancialSnapshot(
             WorkLogFinancialSnapshot financialSnapshot
     ) {
+        if (hasFinancialSnapshot()
+                && financialSnapshot != this.financialSnapshot) {
+            throw new IllegalStateException(
+                    "Financial snapshots are immutable once created"
+            );
+        }
+
         this.financialSnapshot =
                 financialSnapshot;
     }
