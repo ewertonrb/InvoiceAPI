@@ -4,6 +4,10 @@ import com.invoice.invoice_api.dto.companyMembership.CompanyMembershipRequestDTO
 import com.invoice.invoice_api.dto.companyMembership.CompanyMembershipResponseDTO;
 import com.invoice.invoice_api.dto.companyMembership.CompanyMembershipRoleRequestDTO;
 import com.invoice.invoice_api.enums.MembershipStatus;
+import com.invoice.invoice_api.enums.CompanyRole;
+import com.invoice.invoice_api.enums.WorkerProfileStatus;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
+import com.invoice.invoice_api.exception.InvalidOperationException;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.CompanyMembershipMapper;
@@ -13,6 +17,8 @@ import com.invoice.invoice_api.model.CompanyMembership;
 import com.invoice.invoice_api.repository.AppUserRepository;
 import com.invoice.invoice_api.repository.CompanyMembershipRepository;
 import com.invoice.invoice_api.repository.CompanyRepository;
+import com.invoice.invoice_api.repository.WorkerProfileRepository;
+import com.invoice.invoice_api.security.CompanyContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,15 +31,21 @@ public class CompanyMembershipService {
     private final CompanyMembershipRepository membershipRepository;
     private final AppUserRepository appUserRepository;
     private final CompanyRepository companyRepository;
+    private final WorkerProfileRepository workerProfileRepository;
+    private final CompanyContext companyContext;
 
     public CompanyMembershipService(
             CompanyMembershipRepository membershipRepository,
             AppUserRepository appUserRepository,
-            CompanyRepository companyRepository
+            CompanyRepository companyRepository,
+            WorkerProfileRepository workerProfileRepository,
+            CompanyContext companyContext
     ) {
         this.membershipRepository = membershipRepository;
         this.appUserRepository = appUserRepository;
         this.companyRepository = companyRepository;
+        this.workerProfileRepository = workerProfileRepository;
+        this.companyContext = companyContext;
     }
 
     // =========================================================
@@ -44,6 +56,10 @@ public class CompanyMembershipService {
     public CompanyMembershipResponseDTO create(
             CompanyMembershipRequestDTO request
     ) {
+        throw new InvalidOperationException(
+                "Memberships must be created through an invitation or public join link"
+        );
+        /*
         AppUser appUser = findAppUserById(request.appUserId());
         Company company = findCompanyById(request.companyId());
 
@@ -73,6 +89,7 @@ public class CompanyMembershipService {
                 membershipRepository.save(membership);
 
         return CompanyMembershipMapper.toResponseDTO(savedMembership);
+        */
     }
 
     // =========================================================
@@ -81,7 +98,12 @@ public class CompanyMembershipService {
 
     @Transactional(readOnly = true)
     public CompanyMembershipResponseDTO findById(Long id) {
-        CompanyMembership membership = findMembershipById(id);
+        Long companyId = companyContext.getCompanyId();
+        requireMembershipReader(companyId);
+        CompanyMembership membership = findMembershipByIdAndCompany(
+                id,
+                companyId
+        );
 
         return CompanyMembershipMapper.toResponseDTO(membership);
     }
@@ -90,11 +112,14 @@ public class CompanyMembershipService {
     public List<CompanyMembershipResponseDTO> findByUserId(
             Long appUserId
     ) {
-        findAppUserById(appUserId);
+        Long companyId = companyContext.getCompanyId();
+        requireMembershipReader(companyId);
 
         return membershipRepository
                 .findByAppUserId(appUserId)
                 .stream()
+                .filter(membership -> membership.getCompany().getId()
+                        .equals(companyId))
                 .map(CompanyMembershipMapper::toResponseDTO)
                 .toList();
     }
@@ -103,6 +128,7 @@ public class CompanyMembershipService {
     public List<CompanyMembershipResponseDTO> findByCompanyId(
             Long companyId
     ) {
+        requireMembershipReader(companyId);
         findCompanyById(companyId);
 
         return membershipRepository
@@ -116,6 +142,7 @@ public class CompanyMembershipService {
     public List<CompanyMembershipResponseDTO> findActiveByCompanyId(
             Long companyId
     ) {
+        requireMembershipReader(companyId);
         findCompanyById(companyId);
 
         return membershipRepository
@@ -137,10 +164,67 @@ public class CompanyMembershipService {
             Long membershipId,
             CompanyMembershipRoleRequestDTO request
     ) {
-        CompanyMembership membership =
-                findMembershipById(membershipId);
+        return updateRole(
+                companyContext.getCompanyId(),
+                membershipId,
+                request
+        );
+    }
 
-        membership.setRole(request.role());
+    @Transactional
+    public CompanyMembershipResponseDTO updateRole(
+            Long companyId,
+            Long membershipId,
+            CompanyMembershipRoleRequestDTO request
+    ) {
+        requireRoleManager(companyId);
+
+        CompanyMembership membershipSnapshot =
+                findMembershipByIdAndCompany(
+                        membershipId,
+                        companyId
+                );
+
+        workerProfileRepository
+                .findByAppUserId(
+                        membershipSnapshot.getAppUser().getId()
+                )
+                .ifPresent(profile ->
+                        workerProfileRepository.findByIdForUpdate(
+                                profile.getId()
+                        )
+                );
+
+        CompanyMembership membership =
+                lockMembershipByIdAndCompany(
+                        membershipId,
+                        companyId
+                );
+
+        if (membership.getStatus() != MembershipStatus.ACTIVE) {
+            throw new InvalidOperationException(
+                    "Only active memberships can change role"
+            );
+        }
+
+        CompanyRole currentRole = membership.getRole();
+        CompanyRole requestedRole = request.role();
+
+        if ((currentRole != CompanyRole.WORKER
+                && currentRole != CompanyRole.MANAGER
+                && currentRole != CompanyRole.FINANCE)
+                || (requestedRole != CompanyRole.MANAGER
+                && requestedRole != CompanyRole.FINANCE)) {
+            throw new InvalidOperationException(
+                    "This endpoint can only promote workers or alternate MANAGER and FINANCE roles"
+            );
+        }
+
+        membership.setRole(requestedRole);
+
+        if (currentRole == CompanyRole.WORKER) {
+            suspendProfileWithoutWorkerMemberships(membership);
+        }
 
         CompanyMembership updatedMembership =
                 membershipRepository.save(membership);
@@ -154,7 +238,10 @@ public class CompanyMembershipService {
 
     @Transactional
     public void deactivate(Long id) {
-        CompanyMembership membership = findMembershipById(id);
+        Long companyId = companyContext.getCompanyId();
+        requireRoleManager(companyId);
+        CompanyMembership membership = lockMembershipByIdAndCompany(id, companyId);
+        validateStatusTargetRole(membership);
 
         if (membership.getStatus() == MembershipStatus.SUSPENDED) {
             return;
@@ -168,7 +255,10 @@ public class CompanyMembershipService {
 
     @Transactional
     public CompanyMembershipResponseDTO reactivate(Long id) {
-        CompanyMembership membership = findMembershipById(id);
+        Long companyId = companyContext.getCompanyId();
+        requireRoleManager(companyId);
+        CompanyMembership membership = lockMembershipByIdAndCompany(id, companyId);
+        validateStatusTargetRole(membership);
 
         if (membership.getStatus() == MembershipStatus.ACTIVE) {
             return CompanyMembershipMapper.toResponseDTO(membership);
@@ -221,6 +311,98 @@ public class CompanyMembershipService {
                                 "Company membership not found with ID: " + id
                         )
                 );
+    }
+
+    private CompanyMembership findMembershipByIdAndCompany(
+            Long membershipId,
+            Long companyId
+    ) {
+        return membershipRepository
+                .findById(membershipId)
+                .filter(membership -> membership.getCompany().getId()
+                        .equals(companyId))
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Company membership not found with ID: "
+                                + membershipId
+                ));
+    }
+
+    private CompanyMembership lockMembershipByIdAndCompany(
+            Long membershipId,
+            Long companyId
+    ) {
+        return membershipRepository
+                .findByIdAndCompanyIdForUpdate(membershipId, companyId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Company membership not found with ID: "
+                                + membershipId
+                ));
+    }
+
+    private void requireMembershipReader(Long companyId) {
+        requireSelectedCompany(companyId);
+        CompanyRole role = companyContext.getRole();
+        if (role != CompanyRole.OWNER
+                && role != CompanyRole.ADMIN
+                && role != CompanyRole.MANAGER) {
+            throw new AccessDeniedBusinessException(
+                    "You do not have permission to view company memberships"
+            );
+        }
+    }
+
+    private void requireRoleManager(Long companyId) {
+        requireSelectedCompany(companyId);
+        CompanyRole role = companyContext.getRole();
+        if (role != CompanyRole.OWNER
+                && role != CompanyRole.ADMIN) {
+            throw new AccessDeniedBusinessException(
+                    "Only owners and administrators can manage membership roles"
+            );
+        }
+    }
+
+    private void requireSelectedCompany(Long companyId) {
+        if (!companyId.equals(companyContext.getCompanyId())) {
+            throw new AccessDeniedBusinessException(
+                    "The selected company does not match the requested company"
+            );
+        }
+    }
+
+    private void validateStatusTargetRole(
+            CompanyMembership membership
+    ) {
+        if (membership.getRole() != CompanyRole.MANAGER
+                && membership.getRole() != CompanyRole.FINANCE) {
+            throw new InvalidOperationException(
+                    "This endpoint only changes MANAGER or FINANCE membership status"
+            );
+        }
+    }
+
+    private void suspendProfileWithoutWorkerMemberships(
+            CompanyMembership promotedMembership
+    ) {
+        Long appUserId = promotedMembership.getAppUser().getId();
+        boolean hasActiveWorkerMembership = membershipRepository
+                .findByAppUserId(appUserId)
+                .stream()
+                .anyMatch(membership ->
+                        membership.getRole() == CompanyRole.WORKER
+                                && membership.getStatus()
+                                == MembershipStatus.ACTIVE
+                );
+
+        if (hasActiveWorkerMembership) {
+            return;
+        }
+
+        workerProfileRepository.findByAppUserId(appUserId)
+                .ifPresent(profile -> {
+                    profile.setStatus(WorkerProfileStatus.SUSPENDED);
+                    workerProfileRepository.save(profile);
+                });
     }
 
     private AppUser findAppUserById(Long id) {

@@ -78,8 +78,12 @@ public class CompanyJoinLink {
     )
     private String tokenHash;
 
+    @Column(name = "encrypted_token", length = 512)
+    private String encryptedToken;
+
     @Column(
-            name = "max_uses"
+            name = "max_uses",
+            nullable = false
     )
     private Integer maxUses;
 
@@ -90,7 +94,8 @@ public class CompanyJoinLink {
     private Integer currentUses = 0;
 
     @Column(
-            name = "expires_at"
+            name = "expires_at",
+            nullable = false
     )
     private LocalDateTime expiresAt;
 
@@ -136,14 +141,11 @@ public class CompanyJoinLink {
     }
 
     public boolean isExpired() {
-        return expiresAt != null
-                && expiresAt.isBefore(LocalDateTime.now());
+        return expiresAt.isBefore(LocalDateTime.now());
     }
 
     public boolean hasReachedUsageLimit() {
-        return maxUses != null
-                && maxUses > 0
-                && currentUses >= maxUses;
+        return currentUses >= maxUses;
     }
 
     public boolean isAvailable() {
@@ -203,6 +205,9 @@ public class CompanyJoinLink {
     public void setTokenHash(String tokenHash) {
         this.tokenHash = tokenHash;
     }
+
+    public String getEncryptedToken() { return encryptedToken; }
+    public void setEncryptedToken(String encryptedToken) { this.encryptedToken = encryptedToken; }
 
     public Integer getMaxUses() {
         return maxUses;

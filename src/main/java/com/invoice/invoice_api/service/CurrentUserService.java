@@ -53,6 +53,9 @@ public class CurrentUserService {
                         MembershipStatus.ACTIVE
                 )
                 .stream()
+                .filter(membership -> Boolean.TRUE.equals(
+                        membership.getCompany().getActive()
+                ))
                 .map(membership ->
                         new CurrentUserCompanyResponseDTO(
                                 membership.getId(),

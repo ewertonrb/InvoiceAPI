@@ -8,6 +8,7 @@ import com.invoice.invoice_api.mapper.CompanyInvitationMapper;
 import com.invoice.invoice_api.model.*;
 import com.invoice.invoice_api.repository.*;
 import com.invoice.invoice_api.security.AuthenticatedUserService;
+import com.invoice.invoice_api.security.CompanyContext;
 import com.invoice.invoice_api.security.SecureTokenService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -30,6 +31,7 @@ public class CompanyInvitationService {
     private final AuthenticatedUserService authenticatedUserService;
     private final WorkerProfileRepository workerProfileRepository;
     private final PasswordEncoder passwordEncoder;
+    private final CompanyContext companyContext;
 
     public CompanyInvitationService(
             CompanyInvitationRepository invitationRepository,
@@ -40,7 +42,8 @@ public class CompanyInvitationService {
             CompanyMembershipRepository membershipRepository,
             SecureTokenService secureTokenService,
             InvitationProperties properties,
-            AuthenticatedUserService authenticatedUserService
+            AuthenticatedUserService authenticatedUserService,
+            CompanyContext companyContext
     ) {
         this.invitationRepository = invitationRepository;
         this.companyRepository = companyRepository;
@@ -51,6 +54,7 @@ public class CompanyInvitationService {
         this.secureTokenService = secureTokenService;
         this.properties = properties;
         this.authenticatedUserService = authenticatedUserService;
+        this.companyContext = companyContext;
     }
 
     /*
@@ -64,9 +68,6 @@ public class CompanyInvitationService {
             Long companyId,
             CompanyInvitationRequestDTO request
     ) {
-        Company company = findCompanyById(companyId);
-        validateCompanyActive(company);
-
         AppUser currentUser =
                 authenticatedUserService.getCurrentUser();
 
@@ -77,6 +78,10 @@ public class CompanyInvitationService {
 
         String normalizedEmail =
                 normalizeEmail(request.email());
+
+        lockInvitationEmail(normalizedEmail);
+        Company company = lockCompanyById(companyId);
+        validateCompanyActive(company);
 
         validateTargetRole(request.role());
 
@@ -147,7 +152,7 @@ public class CompanyInvitationService {
      * ============================================================
      */
 
-    @Transactional(readOnly = true)
+    @Transactional
     public CompanyInvitationResponseDTO findById(
             Long companyId,
             Long invitationId
@@ -161,13 +166,14 @@ public class CompanyInvitationService {
                         invitationId,
                         companyId
                 );
+        refreshExpiredStatus(invitation);
 
         return CompanyInvitationMapper.toResponseDTO(
                 invitation
         );
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CompanyInvitationResponseDTO> findByCompany(
             Long companyId
     ) {
@@ -176,6 +182,7 @@ public class CompanyInvitationService {
         );
 
         findCompanyById(companyId);
+        expirePendingInvitations(companyId);
 
         return invitationRepository
                 .findByCompanyIdOrderByCreatedAtDesc(
@@ -188,7 +195,7 @@ public class CompanyInvitationService {
                 .toList();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<CompanyInvitationResponseDTO> findByCompanyAndStatus(
             Long companyId,
             InvitationStatus status
@@ -198,6 +205,7 @@ public class CompanyInvitationService {
         );
 
         findCompanyById(companyId);
+        expirePendingInvitations(companyId);
 
         return invitationRepository
                 .findByCompanyIdAndStatusOrderByCreatedAtDesc(
@@ -310,10 +318,16 @@ public class CompanyInvitationService {
     public void decline(
             DeclineCompanyInvitationRequestDTO request
     ) {
+        CompanyInvitation invitationSnapshot =
+                findInvitationByRawToken(request.token());
+
+        lockInvitationEmail(invitationSnapshot.getEmail());
+        lockCompanyById(
+                invitationSnapshot.getCompany().getId()
+        );
+
         CompanyInvitation invitation =
-                findInvitationByRawToken(
-                        request.token()
-                );
+                findInvitationByRawTokenForUpdate(request.token());
 
         refreshExpiredStatus(invitation);
 
@@ -374,8 +388,16 @@ public class CompanyInvitationService {
     ) {
         validatePasswordConfirmation(request);
 
+        CompanyInvitation invitationSnapshot =
+                findInvitationByRawToken(request.token());
+
+        lockInvitationEmail(invitationSnapshot.getEmail());
+        lockCompanyById(
+                invitationSnapshot.getCompany().getId()
+        );
+
         CompanyInvitation invitation =
-                findInvitationByRawToken(
+                findInvitationByRawTokenForUpdate(
                         request.token()
                 );
 
@@ -405,10 +427,10 @@ public class CompanyInvitationService {
                     request.password()
             );
 
-            createWorkerProfileIfNecessary(appUser);
-
             newAccountCreated = true;
         }
+
+        createWorkerProfileIfNecessary(appUser);
 
         CompanyMembership membership =
                 activateOrCreateMembership(
@@ -460,6 +482,12 @@ public class CompanyInvitationService {
         if (existingMembership.isPresent()) {
             CompanyMembership membership =
                     existingMembership.get();
+
+            if (membership.getRole() != CompanyRole.WORKER) {
+                throw new InvalidOperationException(
+                        "An existing non-worker membership cannot be replaced by a worker invitation."
+                );
+            }
 
             if (
                     membership.getStatus()
@@ -513,12 +541,22 @@ public class CompanyInvitationService {
     private void createWorkerProfileIfNecessary(
             AppUser appUser
     ) {
-        if (
-                workerProfileRepository
-                        .existsByAppUserId(
-                                appUser.getId()
-                        )
-        ) {
+        Optional<WorkerProfile> existingProfile =
+                workerProfileRepository.findByAppUserId(
+                        appUser.getId()
+                );
+
+        if (existingProfile.isPresent()) {
+            WorkerProfile workerProfile = existingProfile.get();
+
+            if (workerProfile.getStatus()
+                    == WorkerProfileStatus.SUSPENDED) {
+                WorkerProfileRules.updateCompletionStatus(
+                        workerProfile
+                );
+                workerProfileRepository.save(workerProfile);
+            }
+
             return;
         }
 
@@ -530,7 +568,6 @@ public class CompanyInvitationService {
                 WorkerProfileStatus.INCOMPLETE
         );
 
-        workerProfile.setGstRegistered(false);
         workerProfile.setGstRegistered(false);
 
         workerProfileRepository.save(
@@ -554,6 +591,12 @@ public class CompanyInvitationService {
             AppUser currentUser,
             Long companyId
     ) {
+        if (!companyId.equals(companyContext.getCompanyId())) {
+            throw new AccessDeniedBusinessException(
+                    "The selected company does not match the requested company."
+            );
+        }
+
         CompanyMembership membership =
                 membershipRepository
                         .findByAppUserIdAndCompanyId(
@@ -839,31 +882,37 @@ public class CompanyInvitationService {
                 );
     }
 
+    private Company lockCompanyById(Long companyId) {
+        return companyRepository
+                .findByIdForUpdate(companyId)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Company not found with ID: "
+                                        + companyId
+                        )
+                );
+    }
+
+    private void lockInvitationEmail(String email) {
+        invitationRepository.acquireInvitationEmailLock(email);
+    }
+
     private CompanyInvitation findInvitationInCompany(
             Long invitationId,
             Long companyId
     ) {
         CompanyInvitation invitation =
                 invitationRepository
-                        .findById(invitationId)
+                        .findByIdAndCompanyId(
+                                invitationId,
+                                companyId
+                        )
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Company invitation not found with ID: "
                                                 + invitationId
                                 )
                         );
-
-        if (
-                !invitation
-                        .getCompany()
-                        .getId()
-                        .equals(companyId)
-        ) {
-            throw new ResourceNotFoundException(
-                    "Company invitation not found with ID: "
-                            + invitationId
-            );
-        }
 
         return invitation;
     }
@@ -894,6 +943,28 @@ public class CompanyInvitationService {
                 );
     }
 
+    private CompanyInvitation findInvitationByRawTokenForUpdate(
+            String rawToken
+    ) {
+        if (rawToken == null || rawToken.isBlank()) {
+            throw new BusinessException(
+                    "Invitation token is required."
+            );
+        }
+
+        String tokenHash = secureTokenService.hashToken(
+                rawToken.trim()
+        );
+
+        return invitationRepository
+                .findByTokenHashForUpdate(tokenHash)
+                .orElseThrow(() ->
+                        new ResourceNotFoundException(
+                                "Invitation was not found."
+                        )
+                );
+    }
+
     /*
      * ============================================================
      * STATUS / URL / NORMALIZATION
@@ -914,6 +985,15 @@ public class CompanyInvitationService {
 
             invitationRepository.save(invitation);
         }
+    }
+
+    private void expirePendingInvitations(Long companyId) {
+        invitationRepository
+                .findByCompanyIdAndStatusOrderByCreatedAtDesc(
+                        companyId,
+                        InvitationStatus.PENDING
+                )
+                .forEach(this::refreshExpiredStatus);
     }
 
     private void validateCompanyActive(
@@ -993,5 +1073,3 @@ public class CompanyInvitationService {
         return value.trim();
     }
 }
-
-

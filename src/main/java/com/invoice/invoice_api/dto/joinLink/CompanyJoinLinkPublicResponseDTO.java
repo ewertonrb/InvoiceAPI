@@ -9,7 +9,7 @@ public record CompanyJoinLinkPublicResponseDTO(
 
         CompanyRole role,
 
-        Integer remainingUses,
+        int remainingUses,
 
         LocalDateTime expiresAt,
 

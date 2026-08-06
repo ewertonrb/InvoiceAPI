@@ -4,29 +4,25 @@ import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.enums.WorkerProfileStatus;
 
-public record WorkerProfileSummaryDTO(
-        Long workerProfileId,
+import java.time.LocalDateTime;
 
+public record WorkerProfileAdminResponseDTO(
+        Long id,
         Long appUserId,
-
         String fullName,
-
         String email,
-
-        String phone,
-
         String abn,
-
         Boolean gstRegistered,
-
+        String phone,
         WorkerProfileStatus status,
-
         Long membershipId,
-
         CompanyRole membershipRole,
-
         MembershipStatus membershipStatus,
-
-        Boolean profileComplete
+        LocalDateTime completedAt,
+        BankDetailsResponseDTO bankDetails,
+        SuperDetailsResponseDTO superDetails,
+        String notes,
+        LocalDateTime createdAt,
+        LocalDateTime updatedAt
 ) {
 }

@@ -1,7 +1,8 @@
 package com.invoice.invoice_api.controller;
 
-import com.invoice.invoice_api.dto.workerProfile.WorkerProfileResponseDTO;
+import com.invoice.invoice_api.dto.workerProfile.WorkerProfileAdminResponseDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileSummaryDTO;
+import com.invoice.invoice_api.enums.MembershipStatus;
 import com.invoice.invoice_api.service.WorkerProfileService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,18 +22,22 @@ public class CompanyWorkerController {
 
     @GetMapping
     public ResponseEntity<List<WorkerProfileSummaryDTO>> findActiveWorkers(
-            @PathVariable Long companyId
+            @PathVariable Long companyId,
+            @RequestParam(defaultValue = "true") boolean activeOnly,
+            @RequestParam(required = false) MembershipStatus status
     ) {
         return ResponseEntity.ok(
                 workerProfileService
-                        .findActiveWorkersByCompany(
-                                companyId
+                        .findWorkersByCompany(
+                                companyId,
+                                activeOnly,
+                                status
                         )
         );
     }
 
     @GetMapping("/{workerProfileId}")
-    public ResponseEntity<WorkerProfileResponseDTO> findById(
+    public ResponseEntity<WorkerProfileAdminResponseDTO> findById(
             @PathVariable Long companyId,
             @PathVariable Long workerProfileId
     ) {
@@ -45,7 +50,7 @@ public class CompanyWorkerController {
     }
 
     @PatchMapping("/{workerProfileId}/suspend")
-    public ResponseEntity<WorkerProfileResponseDTO> suspend(
+    public ResponseEntity<WorkerProfileAdminResponseDTO> suspend(
             @PathVariable Long companyId,
             @PathVariable Long workerProfileId
     ) {
@@ -58,7 +63,7 @@ public class CompanyWorkerController {
     }
 
     @PatchMapping("/{workerProfileId}/reactivate")
-    public ResponseEntity<WorkerProfileResponseDTO> reactivate(
+    public ResponseEntity<WorkerProfileAdminResponseDTO> reactivate(
             @PathVariable Long companyId,
             @PathVariable Long workerProfileId
     ) {

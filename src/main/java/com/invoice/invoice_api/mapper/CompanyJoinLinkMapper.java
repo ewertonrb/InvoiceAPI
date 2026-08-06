@@ -28,22 +28,12 @@ public final class CompanyJoinLinkMapper {
         );
     }
 
-    private static Integer calculateRemainingUses(
+    private static int calculateRemainingUses(
             CompanyJoinLink joinLink
     ) {
-        Integer maxUses = joinLink.getMaxUses();
-
-        if (maxUses == null || maxUses == 0) {
-            return null;
-        }
-
-        Integer currentUses =
-                joinLink.getCurrentUses() == null
-                        ? 0
-                        : joinLink.getCurrentUses();
-
         return Math.max(
-                maxUses - currentUses,
+                joinLink.getMaxUses()
+                        - joinLink.getCurrentUses(),
                 0
         );
     }

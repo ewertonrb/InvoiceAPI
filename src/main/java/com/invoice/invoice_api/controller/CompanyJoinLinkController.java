@@ -3,6 +3,7 @@ package com.invoice.invoice_api.controller;
 import com.invoice.invoice_api.dto.joinLink.CompanyJoinLinkCreatedResponseDTO;
 import com.invoice.invoice_api.dto.joinLink.CompanyJoinLinkRequestDTO;
 import com.invoice.invoice_api.dto.joinLink.CompanyJoinLinkResponseDTO;
+import com.invoice.invoice_api.dto.joinLink.CompanyJoinLinkUrlResponseDTO;
 import com.invoice.invoice_api.enums.JoinLinkStatus;
 import com.invoice.invoice_api.service.CompanyJoinLinkService;
 import jakarta.validation.Valid;
@@ -77,6 +78,11 @@ public class CompanyJoinLinkController {
         );
     }
 
+    @GetMapping("/{joinLinkId}/url")
+    public ResponseEntity<CompanyJoinLinkUrlResponseDTO> findUrl(@PathVariable Long companyId, @PathVariable Long joinLinkId) {
+        return ResponseEntity.ok(new CompanyJoinLinkUrlResponseDTO(joinLinkService.findUrl(companyId, joinLinkId)));
+    }
+
     @PatchMapping("/{joinLinkId}/disable")
     public ResponseEntity<CompanyJoinLinkResponseDTO> disable(
             @PathVariable Long companyId,
@@ -88,5 +94,10 @@ public class CompanyJoinLinkController {
                         joinLinkId
                 )
         );
+    }
+
+    @PatchMapping("/{joinLinkId}/activate")
+    public ResponseEntity<CompanyJoinLinkResponseDTO> activate(@PathVariable Long companyId, @PathVariable Long joinLinkId) {
+        return ResponseEntity.ok(joinLinkService.activate(companyId, joinLinkId));
     }
 }

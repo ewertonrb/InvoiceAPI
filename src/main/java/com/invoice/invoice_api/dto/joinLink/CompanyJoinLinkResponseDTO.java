@@ -16,11 +16,11 @@ public record CompanyJoinLinkResponseDTO(
 
         JoinLinkStatus status,
 
-        Integer maxUses,
+        int maxUses,
 
-        Integer currentUses,
+        int currentUses,
 
-        Integer remainingUses,
+        int remainingUses,
 
         LocalDateTime expiresAt,
 

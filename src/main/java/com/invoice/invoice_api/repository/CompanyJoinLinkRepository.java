@@ -15,6 +15,9 @@ public interface CompanyJoinLinkRepository extends JpaRepository<CompanyJoinLink
 
     Optional<CompanyJoinLink> findByTokenHash(String tokenHash);
 
+    @Query(value = "SELECT pg_advisory_xact_lock(hashtextextended(lower(:email), 0))", nativeQuery = true)
+    Object acquireJoinEmailLock(@Param("email") String email);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("""
         SELECT joinLink
@@ -23,6 +26,20 @@ public interface CompanyJoinLinkRepository extends JpaRepository<CompanyJoinLink
         WHERE joinLink.tokenHash = :tokenHash
        """)
     Optional<CompanyJoinLink> findByTokenHashForUpdate(@Param("tokenHash") String tokenHash);
+
+    Optional<CompanyJoinLink> findByIdAndCompanyId(Long joinLinkId, Long companyId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+        SELECT joinLink
+        FROM CompanyJoinLink joinLink
+        WHERE joinLink.id = :joinLinkId
+          AND joinLink.company.id = :companyId
+       """)
+    Optional<CompanyJoinLink> findByIdAndCompanyIdForUpdate(
+            @Param("joinLinkId") Long joinLinkId,
+            @Param("companyId") Long companyId
+    );
 
     List<CompanyJoinLink> findByCompanyIdOrderByCreatedAtDesc(Long companyId);
 

@@ -2,8 +2,10 @@ package com.invoice.invoice_api.mapper;
 
 import com.invoice.invoice_api.dto.workerProfile.BankDetailsResponseDTO;
 import com.invoice.invoice_api.dto.workerProfile.SuperDetailsResponseDTO;
+import com.invoice.invoice_api.dto.workerProfile.WorkerProfileAdminResponseDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileResponseDTO;
 import com.invoice.invoice_api.dto.workerProfile.WorkerProfileSummaryDTO;
+import com.invoice.invoice_api.model.CompanyMembership;
 import com.invoice.invoice_api.model.WorkerProfile;
 import com.invoice.invoice_api.model.embeddable.BankDetails;
 import com.invoice.invoice_api.model.embeddable.SuperDetails;
@@ -53,7 +55,8 @@ public class WorkerProfileMapper {
     }
 
     public static WorkerProfileSummaryDTO toSummaryDTO(
-            WorkerProfile workerProfile
+            WorkerProfile workerProfile,
+            CompanyMembership membership
     ) {
 
         return new WorkerProfileSummaryDTO(
@@ -74,7 +77,40 @@ public class WorkerProfileMapper {
 
                 workerProfile.getStatus(),
 
+                membership.getId(),
+
+                membership.getRole(),
+
+                membership.getStatus(),
+
                 workerProfile.isComplete()
+        );
+    }
+
+    public static WorkerProfileAdminResponseDTO toAdminResponseDTO(
+            WorkerProfile workerProfile,
+            CompanyMembership membership
+    ) {
+        WorkerProfileResponseDTO profile = toResponseDTO(workerProfile);
+
+        return new WorkerProfileAdminResponseDTO(
+                profile.id(),
+                profile.appUserId(),
+                profile.fullName(),
+                profile.email(),
+                profile.abn(),
+                profile.gstRegistered(),
+                profile.phone(),
+                profile.status(),
+                membership.getId(),
+                membership.getRole(),
+                membership.getStatus(),
+                profile.completedAt(),
+                profile.bankDetails(),
+                profile.superDetails(),
+                profile.notes(),
+                profile.createdAt(),
+                profile.updatedAt()
         );
     }
 }

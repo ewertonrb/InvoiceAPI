@@ -7,9 +7,12 @@ import com.invoice.invoice_api.mapper.CompanyJoinLinkMapper;
 import com.invoice.invoice_api.model.*;
 import com.invoice.invoice_api.repository.*;
 import com.invoice.invoice_api.security.AuthenticatedUserService;
+import com.invoice.invoice_api.security.CompanyContext;
 import com.invoice.invoice_api.security.SecureTokenService;
+import com.invoice.invoice_api.security.JoinLinkTokenCipher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -29,7 +32,10 @@ public class CompanyJoinLinkService {
         private final InvitationProperties properties;
         private final AuthenticatedUserService authenticatedUserService;
         private final PasswordEncoder passwordEncoder;
+        private final CompanyContext companyContext;
+        private final JoinLinkTokenCipher tokenCipher;
 
+        @Autowired
         public CompanyJoinLinkService(
                 CompanyJoinLinkRepository joinLinkRepository,
                 CompanyRepository companyRepository,
@@ -39,7 +45,9 @@ public class CompanyJoinLinkService {
                 SecureTokenService secureTokenService,
                 InvitationProperties properties,
                 AuthenticatedUserService authenticatedUserService,
-                PasswordEncoder passwordEncoder
+                PasswordEncoder passwordEncoder,
+                CompanyContext companyContext,
+                JoinLinkTokenCipher tokenCipher
         ) {
             this.joinLinkRepository = joinLinkRepository;
             this.companyRepository = companyRepository;
@@ -50,6 +58,12 @@ public class CompanyJoinLinkService {
             this.properties = properties;
             this.authenticatedUserService = authenticatedUserService;
             this.passwordEncoder = passwordEncoder;
+            this.companyContext = companyContext;
+            this.tokenCipher = tokenCipher;
+        }
+
+        public CompanyJoinLinkService(CompanyJoinLinkRepository joinLinkRepository, CompanyRepository companyRepository, CompanyMembershipRepository membershipRepository, AppUserRepository appUserRepository, WorkerProfileRepository workerProfileRepository, SecureTokenService secureTokenService, InvitationProperties properties, AuthenticatedUserService authenticatedUserService, PasswordEncoder passwordEncoder, CompanyContext companyContext) {
+            this(joinLinkRepository, companyRepository, membershipRepository, appUserRepository, workerProfileRepository, secureTokenService, properties, authenticatedUserService, passwordEncoder, companyContext, null);
         }
 
         /*
@@ -63,10 +77,6 @@ public class CompanyJoinLinkService {
                 Long companyId,
                 CompanyJoinLinkRequestDTO request
         ) {
-            Company company = findCompanyById(companyId);
-
-            validateCompanyActive(company);
-
             AppUser currentUser =
                     authenticatedUserService.getCurrentUser();
 
@@ -74,6 +84,9 @@ public class CompanyJoinLinkService {
                     currentUser,
                     companyId
             );
+
+            Company company = findCompanyById(companyId);
+            validateCompanyActive(company);
 
             validateTargetRole(request.role());
             validateMaxUses(request.maxUses());
@@ -93,6 +106,7 @@ public class CompanyJoinLinkService {
             joinLink.setStatus(JoinLinkStatus.ACTIVE);
             joinLink.setCreatedBy(currentUser);
             joinLink.setTokenHash(tokenHash);
+            if (tokenCipher != null) joinLink.setEncryptedToken(tokenCipher.encrypt(rawToken));
             joinLink.setMaxUses(
                     normalizeMaxUses(request.maxUses())
             );
@@ -116,7 +130,7 @@ public class CompanyJoinLinkService {
          * ============================================================
          */
 
-        @Transactional(readOnly = true)
+        @Transactional
         public CompanyJoinLinkResponseDTO findById(
                 Long companyId,
                 Long joinLinkId
@@ -128,16 +142,31 @@ public class CompanyJoinLinkService {
                             joinLinkId,
                             companyId
                     );
+            refreshAvailabilityStatus(joinLink);
 
             return CompanyJoinLinkMapper.toResponseDTO(joinLink);
         }
 
         @Transactional(readOnly = true)
+        public String findUrl(Long companyId, Long joinLinkId) {
+            validateCurrentUserCanManage(companyId);
+            CompanyJoinLink joinLink = findJoinLinkInCompany(joinLinkId, companyId);
+            if (joinLink.getStatus() != JoinLinkStatus.ACTIVE || joinLink.isExpired() || joinLink.hasReachedUsageLimit()) {
+                throw new InvalidOperationException("Only an active join link with remaining quota can be viewed.");
+            }
+            if (tokenCipher == null || joinLink.getEncryptedToken() == null) {
+                throw new InvalidOperationException("This legacy join link cannot be recovered. Create a new link.");
+            }
+            return buildJoinUrl(tokenCipher.decrypt(joinLink.getEncryptedToken()));
+        }
+
+        @Transactional
         public List<CompanyJoinLinkResponseDTO> findByCompany(
                 Long companyId
         ) {
             validateCurrentUserCanManage(companyId);
             findCompanyById(companyId);
+            refreshCompanyJoinLinks(companyId);
 
             return joinLinkRepository
                     .findByCompanyIdOrderByCreatedAtDesc(
@@ -148,13 +177,14 @@ public class CompanyJoinLinkService {
                     .toList();
         }
 
-        @Transactional(readOnly = true)
+        @Transactional
         public List<CompanyJoinLinkResponseDTO> findByCompanyAndStatus(
                 Long companyId,
                 JoinLinkStatus status
         ) {
             validateCurrentUserCanManage(companyId);
             findCompanyById(companyId);
+            refreshCompanyJoinLinks(companyId);
 
             return joinLinkRepository
                     .findByCompanyIdAndStatusOrderByCreatedAtDesc(
@@ -200,10 +230,37 @@ public class CompanyJoinLinkService {
         public AcceptCompanyJoinLinkResponseDTO accept(
                 AcceptCompanyJoinLinkRequestDTO request
         ) {
-            validatePasswordConfirmation(request);
-
             String tokenHash =
                     hashRequiredToken(request.token());
+
+            AppUser appUser =
+                    authenticatedUserService.getCurrentUser();
+            validateAuthenticatedUser(appUser);
+
+            String normalizedEmail =
+                    normalizeEmail(appUser.getEmail());
+
+            CompanyJoinLink snapshot = joinLinkRepository
+                    .findByTokenHash(tokenHash)
+                    .orElseThrow(() ->
+                            new ResourceNotFoundException(
+                                    "Join link was not found."
+                            )
+                    );
+
+            joinLinkRepository.acquireJoinEmailLock(
+                    normalizedEmail
+            );
+
+            companyRepository
+                    .findByIdForUpdate(
+                            snapshot.getCompany().getId()
+                    )
+                    .orElseThrow(() ->
+                            new ResourceNotFoundException(
+                                    "Company was not found."
+                            )
+                    );
 
             CompanyJoinLink joinLink =
                     joinLinkRepository
@@ -215,39 +272,6 @@ public class CompanyJoinLinkService {
                             );
 
             validateJoinLinkCanBeUsed(joinLink);
-
-            String normalizedEmail =
-                    normalizeEmail(request.email());
-
-            Optional<AppUser> existingUser =
-                    appUserRepository
-                            .findByEmailIgnoreCase(
-                                    normalizedEmail
-                            );
-
-            AppUser appUser;
-            boolean newAccountCreated;
-
-            if (existingUser.isPresent()) {
-
-                appUser = existingUser.get();
-
-                validateExistingUser(
-                        appUser,
-                        request.password()
-                );
-
-                newAccountCreated = false;
-
-            } else {
-
-                appUser = createNewAppUser(
-                        request,
-                        normalizedEmail
-                );
-
-                newAccountCreated = true;
-            }
 
             CompanyMembership membership =
                     activateOrCreateMembership(
@@ -279,9 +303,17 @@ public class CompanyJoinLinkService {
                     membership.getRole(),
                     membership.getStatus(),
                     calculateRemainingUses(savedJoinLink),
-                    newAccountCreated,
+                    false,
                     "COMPLETE_WORKER_PROFILE"
             );
+        }
+
+        private void validateAuthenticatedUser(AppUser appUser) {
+            if (appUser.getStatus() != UserStatus.ACTIVE) {
+                throw new InvalidOperationException(
+                        "Only active authenticated users can accept public join links."
+                );
+            }
         }
 
         /*
@@ -298,10 +330,17 @@ public class CompanyJoinLinkService {
             validateCurrentUserCanManage(companyId);
 
             CompanyJoinLink joinLink =
-                    findJoinLinkInCompany(
-                            joinLinkId,
-                            companyId
-                    );
+                    joinLinkRepository
+                            .findByIdAndCompanyIdForUpdate(
+                                    joinLinkId,
+                                    companyId
+                            )
+                            .orElseThrow(() ->
+                                    new ResourceNotFoundException(
+                                            "Company join link not found with ID: "
+                                                    + joinLinkId
+                                    )
+                            );
 
             if (
                     joinLink.getStatus()
@@ -337,6 +376,18 @@ public class CompanyJoinLinkService {
             );
         }
 
+        @Transactional
+        public CompanyJoinLinkResponseDTO activate(Long companyId, Long joinLinkId) {
+            validateCurrentUserCanManage(companyId);
+            CompanyJoinLink joinLink = joinLinkRepository.findByIdAndCompanyIdForUpdate(joinLinkId, companyId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Company join link not found with ID: " + joinLinkId));
+            if (joinLink.getStatus() != JoinLinkStatus.DISABLED) throw new InvalidOperationException("Only a disabled join link can be reactivated.");
+            if (joinLink.isExpired() || joinLink.hasReachedUsageLimit()) throw new InvalidOperationException("This join link can no longer be reactivated because it expired or reached its usage limit.");
+            joinLink.setStatus(JoinLinkStatus.ACTIVE);
+            joinLink.setDisabledAt(null);
+            return CompanyJoinLinkMapper.toResponseDTO(joinLinkRepository.save(joinLink));
+        }
+
         /*
          * ============================================================
          * PERMISSIONS
@@ -359,6 +410,12 @@ public class CompanyJoinLinkService {
                 AppUser currentUser,
                 Long companyId
         ) {
+            if (!companyId.equals(companyContext.getCompanyId())) {
+                throw new AccessDeniedBusinessException(
+                        "The selected company does not match the requested company."
+                );
+            }
+
             CompanyMembership membership =
                     membershipRepository
                             .findByAppUserIdAndCompanyId(
@@ -420,12 +477,9 @@ public class CompanyJoinLinkService {
         private void validateMaxUses(
                 Integer maxUses
         ) {
-            if (
-                    maxUses != null
-                            && maxUses < 0
-            ) {
+            if (maxUses == null || maxUses <= 0) {
                 throw new BusinessException(
-                        "Maximum uses cannot be negative."
+                        "Maximum uses must be greater than zero."
                 );
             }
         }
@@ -433,12 +487,10 @@ public class CompanyJoinLinkService {
         private void validateExpirationDate(
                 LocalDateTime expiresAt
         ) {
-            if (
-                    expiresAt != null
-                            && !expiresAt.isAfter(
+            if (expiresAt == null
+                    || !expiresAt.isAfter(
                             LocalDateTime.now()
-                    )
-            ) {
+                    )) {
                 throw new BusinessException(
                         "Expiration date must be in the future."
                 );
@@ -515,104 +567,6 @@ public class CompanyJoinLinkService {
          * ============================================================
          */
 
-        private void validatePasswordConfirmation(
-                AcceptCompanyJoinLinkRequestDTO request
-        ) {
-            if (
-                    !request.password().equals(
-                            request.confirmPassword()
-                    )
-            ) {
-                throw new BusinessException(
-                        "Password and password confirmation do not match."
-                );
-            }
-        }
-
-        private void validateExistingUser(
-                AppUser appUser,
-                String rawPassword
-        ) {
-            if (
-                    appUser.getStatus()
-                            == UserStatus.BLOCKED
-            ) {
-                throw new InvalidOperationException(
-                        "User account is blocked."
-                );
-            }
-
-            if (
-                    appUser.getStatus()
-                            == UserStatus.DELETED
-            ) {
-                throw new InvalidOperationException(
-                        "User account was deleted."
-                );
-            }
-
-            if (
-                    appUser.getStatus()
-                            != UserStatus.ACTIVE
-            ) {
-                throw new InvalidOperationException(
-                        "User account is not active."
-                );
-            }
-
-            if (
-                    !passwordEncoder.matches(
-                            rawPassword,
-                            appUser.getPassword()
-                    )
-            ) {
-                throw new AccessDeniedBusinessException(
-                        "Invalid email or password."
-                );
-            }
-        }
-
-        /*
-         * ============================================================
-         * USER CREATION
-         * ============================================================
-         */
-
-        private AppUser createNewAppUser(
-                AcceptCompanyJoinLinkRequestDTO request,
-                String normalizedEmail
-        ) {
-            AppUser appUser = new AppUser();
-
-            appUser.setName(
-                    normalizeRequiredText(
-                            request.name(),
-                            "Name is required."
-                    )
-            );
-
-            appUser.setSurname(
-                    normalizeRequiredText(
-                            request.surname(),
-                            "Surname is required."
-                    )
-            );
-
-            appUser.setEmail(normalizedEmail);
-
-            appUser.setPassword(
-                    passwordEncoder.encode(
-                            request.password()
-                    )
-            );
-
-            appUser.setStatus(
-                    UserStatus.ACTIVE
-            );
-
-            return appUserRepository.save(appUser);
-        }
-
         /*
          * ============================================================
          * MEMBERSHIP
@@ -637,6 +591,12 @@ public class CompanyJoinLinkService {
 
                 CompanyMembership membership =
                         existingMembership.get();
+
+                if (membership.getRole() != CompanyRole.WORKER) {
+                    throw new InvalidOperationException(
+                            "A non-worker membership cannot be replaced through a public join link."
+                    );
+                }
 
                 if (
                         membership.getStatus()
@@ -693,12 +653,18 @@ public class CompanyJoinLinkService {
         private void createWorkerProfileIfNecessary(
                 AppUser appUser
         ) {
-            if (
-                    workerProfileRepository
-                            .existsByAppUserId(
-                                    appUser.getId()
-                            )
-            ) {
+            Optional<WorkerProfile> existingProfile =
+                    workerProfileRepository.findByAppUserId(
+                            appUser.getId()
+                    );
+
+            if (existingProfile.isPresent()) {
+                WorkerProfile workerProfile = existingProfile.get();
+                if (workerProfile.getStatus()
+                        == WorkerProfileStatus.SUSPENDED) {
+                    WorkerProfileRules.updateCompletionStatus(workerProfile);
+                    workerProfileRepository.save(workerProfile);
+                }
                 return;
             }
 
@@ -710,7 +676,6 @@ public class CompanyJoinLinkService {
                     WorkerProfileStatus.INCOMPLETE
             );
 
-            workerProfile.setGstRegistered(false);
             workerProfile.setGstRegistered(false);
 
             workerProfileRepository.save(
@@ -743,25 +708,13 @@ public class CompanyJoinLinkService {
         ) {
             CompanyJoinLink joinLink =
                     joinLinkRepository
-                            .findById(joinLinkId)
+                            .findByIdAndCompanyId(joinLinkId, companyId)
                             .orElseThrow(() ->
                                     new ResourceNotFoundException(
                                             "Company join link not found with ID: "
                                                     + joinLinkId
                                     )
                             );
-
-            if (
-                    !joinLink
-                            .getCompany()
-                            .getId()
-                            .equals(companyId)
-            ) {
-                throw new ResourceNotFoundException(
-                        "Company join link not found with ID: "
-                                + joinLinkId
-                );
-            }
 
             return joinLink;
         }
@@ -826,6 +779,15 @@ public class CompanyJoinLinkService {
             }
         }
 
+        private void refreshCompanyJoinLinks(Long companyId) {
+            joinLinkRepository
+                    .findByCompanyIdAndStatusOrderByCreatedAtDesc(
+                            companyId,
+                            JoinLinkStatus.ACTIVE
+                    )
+                    .forEach(this::refreshAvailabilityStatus);
+        }
+
         /*
          * ============================================================
          * NORMALIZATION / URL
@@ -835,34 +797,15 @@ public class CompanyJoinLinkService {
         private Integer normalizeMaxUses(
                 Integer maxUses
         ) {
-            if (
-                    maxUses == null
-                            || maxUses == 0
-            ) {
-                return null;
-            }
-
             return maxUses;
         }
 
-        private Integer calculateRemainingUses(
+        private int calculateRemainingUses(
                 CompanyJoinLink joinLink
         ) {
-            if (
-                    joinLink.getMaxUses() == null
-                            || joinLink.getMaxUses() == 0
-            ) {
-                return null;
-            }
-
-            int currentUses =
-                    joinLink.getCurrentUses() == null
-                            ? 0
-                            : joinLink.getCurrentUses();
-
             return Math.max(
                     joinLink.getMaxUses()
-                            - currentUses,
+                            - joinLink.getCurrentUses(),
                     0
             );
         }

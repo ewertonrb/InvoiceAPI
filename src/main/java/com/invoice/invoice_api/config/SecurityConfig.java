@@ -43,9 +43,13 @@ public class SecurityConfig {
                                 "/auth/login",
                                 "/users",
                                 "/public/invitations/accept",
-                                "/public/invitations/decline",
-                                "/public/join-links/accept"
+                                "/public/invitations/decline"
                         ).permitAll()
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/public/join-links/accept"
+                        ).authenticated()
 
                         .requestMatchers(
                                 HttpMethod.GET,
@@ -68,9 +72,170 @@ public class SecurityConfig {
 
                         .requestMatchers(
                                 HttpMethod.PATCH,
-                                "/invoices/*/issue"
+                                "/invoices/*/issue",
+                                "/invoices/*/paid",
+                                "/invoices/*/cancel"
                         )
                         .hasAnyAuthority("OWNER", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/projects"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/projects/*"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/projects/*/deactivate",
+                                "/projects/*/reactivate"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/projectpositions"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/projectpositions/*"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/projectpositions/*/deactivate",
+                                "/projectpositions/*/reactivate"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/project-role-rates/**"
+                        )
+                        .hasAnyAuthority(
+                                "OWNER",
+                                "ADMIN",
+                                "MANAGER",
+                                "FINANCE"
+                        )
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/project-role-rates"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/project-role-rates/*"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/project-role-rates/*/deactivate",
+                                "/project-role-rates/*/reactivate"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/work-logs/worker/**"
+                        )
+                        .hasAnyAuthority(
+                                "OWNER", "ADMIN", "MANAGER", "FINANCE", "WORKER"
+                        )
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/work-logs",
+                                "/work-logs/",
+                                "/work-logs/project/**"
+                        )
+                        .hasAnyAuthority(
+                                "OWNER", "ADMIN", "MANAGER", "FINANCE"
+                        )
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/work-logs/*"
+                        )
+                        .hasAnyAuthority(
+                                "OWNER", "ADMIN", "MANAGER", "FINANCE", "WORKER"
+                        )
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/work-logs"
+                        )
+                        .hasAuthority("WORKER")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/work-logs/*"
+                        )
+                        .hasAuthority("WORKER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/work-logs/*/approve",
+                                "/work-logs/*/reject"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER", "FINANCE")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/work-logs/*/cancel",
+                                "/work-logs/*/reopen"
+                        )
+                        .hasAnyAuthority(
+                                "OWNER", "ADMIN", "MANAGER", "FINANCE", "WORKER"
+                        )
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/worker-profiles/me"
+                        )
+                        .hasAuthority("WORKER")
+
+                        .requestMatchers(
+                                HttpMethod.PUT,
+                                "/worker-profiles/me"
+                        )
+                        .hasAuthority("WORKER")
+
+                        .requestMatchers(
+                                "/companies/*/workers/**",
+                                "/companies/*/invitations/**",
+                                "/companies/*/join-links/**"
+                        )
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/company-memberships"
+                        ).denyAll()
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/company-memberships/*/role",
+                                "/company-memberships/*/deactivate",
+                                "/company-memberships/*/reactivate",
+                                "/companies/*/memberships/*/role"
+                        ).hasAnyAuthority("OWNER", "ADMIN")
+
+                        .requestMatchers(
+                                HttpMethod.GET,
+                                "/company-memberships/**"
+                        ).hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
 
                         .anyRequest().authenticated()
                 )
@@ -88,4 +253,3 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 }
-

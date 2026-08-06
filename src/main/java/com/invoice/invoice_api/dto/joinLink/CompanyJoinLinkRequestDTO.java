@@ -10,12 +10,15 @@ public record CompanyJoinLinkRequestDTO(
         @NotNull(message = "Role is required.")
         CompanyRole role,
 
+        @NotNull(message = "Maximum uses is required.")
         @Min(
-                value = 0,
-                message = "Maximum uses cannot be negative."
+                value = 1,
+                message = "Maximum uses must be greater than zero."
         )
         Integer maxUses,
 
+        @NotNull(message = "Expiration date is required.")
+        @Future(message = "Expiration date must be in the future.")
         LocalDateTime expiresAt
 
 ) {
