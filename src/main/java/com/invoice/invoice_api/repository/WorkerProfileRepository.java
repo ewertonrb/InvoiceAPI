@@ -5,6 +5,8 @@ import com.invoice.invoice_api.model.WorkerProfile;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,6 +14,10 @@ import java.util.List;
 import java.util.Optional;
 
 public interface WorkerProfileRepository extends JpaRepository<WorkerProfile, Long> {
+
+    @Modifying
+    @Query(value = "INSERT INTO worker_profiles (app_user_id, gst_registered, status, created_at, updated_at) VALUES (:appUserId, false, 'INCOMPLETE', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) ON CONFLICT (app_user_id) DO NOTHING", nativeQuery = true)
+    void ensureForAppUser(Long appUserId);
 
     Optional<WorkerProfile> findByAppUserId(
             Long appUserId

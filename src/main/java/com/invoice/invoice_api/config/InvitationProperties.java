@@ -6,8 +6,7 @@ import org.springframework.stereotype.Component;
 @Component
 @ConfigurationProperties(prefix = "app")
 public class InvitationProperties {
-    private final Frontend frontend =
-            new Frontend();
+    private final Frontend frontend = new Frontend();
 
     private final Invitation invitation =
             new Invitation();

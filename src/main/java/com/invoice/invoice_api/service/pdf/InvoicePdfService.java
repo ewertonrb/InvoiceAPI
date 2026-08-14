@@ -7,6 +7,8 @@ import com.invoice.invoice_api.mapper.InvoicePdfMapper;
 import com.invoice.invoice_api.model.Invoice;
 import com.invoice.invoice_api.repository.InvoiceRepository;
 import com.invoice.invoice_api.security.CompanyContext;
+import com.invoice.invoice_api.enums.CompanyRole;
+import com.invoice.invoice_api.security.AuthenticatedUserService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,12 +19,14 @@ public class InvoicePdfService {
     private final CompanyContext companyContext;
     private final HtmlTemplateRenderer htmlTemplateRenderer;
     private final PdfGenerator pdfGenerator;
+    private final AuthenticatedUserService authenticatedUserService;
 
     public InvoicePdfService(
             InvoiceRepository invoiceRepository,
             CompanyContext companyContext,
             HtmlTemplateRenderer htmlTemplateRenderer,
-            PdfGenerator pdfGenerator
+            PdfGenerator pdfGenerator,
+            AuthenticatedUserService authenticatedUserService
     ) {
         this.invoiceRepository =
                 invoiceRepository;
@@ -35,6 +39,7 @@ public class InvoicePdfService {
 
         this.pdfGenerator =
                 pdfGenerator;
+        this.authenticatedUserService = authenticatedUserService;
     }
 
     @Transactional(readOnly = true)
@@ -42,10 +47,9 @@ public class InvoicePdfService {
         Long companyId =
                 companyContext.getCompanyId();
 
-        Invoice invoice = invoiceRepository.findByIdAndCompanyIdWithItems(
-                                invoiceId,
-                                companyId
-                        )
+        Invoice invoice = (companyContext.getRole() == CompanyRole.WORKER
+                        ? invoiceRepository.findByIdAndWorkerAppUserIdAndCompanyIdWithItems(invoiceId, authenticatedUserService.getCurrentUserId(), companyId)
+                        : invoiceRepository.findByIdAndCompanyIdWithItems(invoiceId, companyId))
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Invoice not found with ID: "
@@ -76,10 +80,9 @@ public class InvoicePdfService {
     ) {
         Long companyId = companyContext.getCompanyId();
 
-        Invoice invoice = invoiceRepository.findByIdAndCompanyId(
-                                invoiceId,
-                                companyId
-                        )
+        Invoice invoice = (companyContext.getRole() == CompanyRole.WORKER
+                        ? invoiceRepository.findByIdAndWorkerProfile_AppUser_IdAndCompanyId(invoiceId, authenticatedUserService.getCurrentUserId(), companyId)
+                        : invoiceRepository.findByIdAndCompanyId(invoiceId, companyId))
                         .orElseThrow(() ->
                                 new ResourceNotFoundException(
                                         "Invoice not found with ID: "

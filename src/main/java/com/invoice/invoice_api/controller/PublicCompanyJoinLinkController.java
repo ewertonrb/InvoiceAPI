@@ -3,6 +3,7 @@ package com.invoice.invoice_api.controller;
 import com.invoice.invoice_api.dto.joinLink.AcceptCompanyJoinLinkRequestDTO;
 import com.invoice.invoice_api.dto.joinLink.AcceptCompanyJoinLinkResponseDTO;
 import com.invoice.invoice_api.dto.joinLink.CompanyJoinLinkPublicResponseDTO;
+import com.invoice.invoice_api.dto.joinLink.RegisterPublicJoinLinkRequestDTO;
 import com.invoice.invoice_api.service.CompanyJoinLinkService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
@@ -31,14 +32,18 @@ public class PublicCompanyJoinLinkController {
         );
     }
     @PostMapping("/accept")
-    public ResponseEntity<AcceptCompanyJoinLinkResponseDTO> accept(
-            @Valid
-            @RequestBody
-            AcceptCompanyJoinLinkRequestDTO request
-    ) {
+    public ResponseEntity<AcceptCompanyJoinLinkResponseDTO> accept( @Valid @RequestBody
+                                                                        AcceptCompanyJoinLinkRequestDTO request) {
         return ResponseEntity.ok(
                 joinLinkService.accept(request)
         );
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<AcceptCompanyJoinLinkResponseDTO> register(
+            @Valid @RequestBody RegisterPublicJoinLinkRequestDTO request
+    ) {
+        return ResponseEntity.ok(joinLinkService.registerAndAccept(request));
     }
 
 }

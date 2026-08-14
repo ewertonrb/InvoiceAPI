@@ -11,6 +11,58 @@ import java.util.List;
 import java.util.Optional;
 
 public interface WorkLogRepository extends JpaRepository<WorkLog, Long> {
+    long countByProjectPositionProjectCompanyIdAndStatus(Long companyId, WorkLogStatus status);
+
+    long countByWorkerProfileAppUserIdAndProjectPositionProjectCompanyIdAndStatus(Long appUserId, Long companyId, WorkLogStatus status);
+
+    @Query("""
+        SELECT COUNT(workLog)
+        FROM WorkLog workLog
+        JOIN workLog.workerProfile workerProfile
+        JOIN workLog.projectPosition projectPosition
+        JOIN projectPosition.project project
+        JOIN project.company company
+        WHERE company.id = :companyId
+          AND workLog.status = :status
+          AND workerProfile.status = com.invoice.invoice_api.enums.WorkerProfileStatus.COMPLETE
+          AND workerProfile.abn IS NOT NULL
+          AND workerProfile.bankDetails.bankName IS NOT NULL
+          AND workLog.financialSnapshot.totalAmount IS NOT NULL
+          AND NOT EXISTS (
+                SELECT invoiceItem.id
+                FROM InvoiceItem invoiceItem
+                WHERE invoiceItem.workLog.id = workLog.id
+          )
+        """)
+    long countEligibleForInvoiceDashboard(
+            @Param("companyId") Long companyId,
+            @Param("status") WorkLogStatus status
+    );
+
+    @Query("""
+        SELECT COUNT(workLog)
+        FROM WorkLog workLog
+        JOIN workLog.workerProfile workerProfile
+        JOIN workLog.projectPosition projectPosition
+        JOIN projectPosition.project project
+        JOIN project.company company
+        WHERE company.id = :companyId
+          AND workerProfile.appUser.id = :appUserId
+          AND workLog.status = :status
+          AND workerProfile.status = com.invoice.invoice_api.enums.WorkerProfileStatus.COMPLETE
+          AND workerProfile.abn IS NOT NULL
+          AND workerProfile.bankDetails.bankName IS NOT NULL
+          AND workLog.financialSnapshot.totalAmount IS NOT NULL
+          AND NOT EXISTS (
+                SELECT invoiceItem.id FROM InvoiceItem invoiceItem WHERE invoiceItem.workLog.id = workLog.id
+          )
+        """)
+    long countEligibleForInvoiceDashboardForWorker(
+            @Param("companyId") Long companyId,
+            @Param("appUserId") Long appUserId,
+            @Param("status") WorkLogStatus status
+    );
+
     Optional<WorkLog>
     findByIdAndProjectPositionProjectCompanyId(
             Long workLogId,
@@ -71,15 +123,20 @@ public interface WorkLogRepository extends JpaRepository<WorkLog, Long> {
             WorkLogStatus status
     );
 
-    boolean existsByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNot(
+    List<WorkLog> findAllByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNot(
             Long workerProfileId,
             Long projectPositionId,
             LocalDate workDate,
             WorkLogStatus excludedStatus
     );
 
-    @Query("select count(w) > 0 from WorkLog w where w.workerProfile.id = :worker and w.projectPosition.id = :position and w.workDate = :date and w.status <> :excluded and w.id <> :id")
-    boolean existsActiveDuplicateExceptId(@Param("worker") Long worker, @Param("position") Long position, @Param("date") LocalDate date, @Param("excluded") WorkLogStatus excluded, @Param("id") Long id);
+    List<WorkLog> findAllByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNotAndIdNot(
+            Long workerProfileId,
+            Long projectPositionId,
+            LocalDate workDate,
+            WorkLogStatus excludedStatus,
+            Long id
+    );
 
     @Query("""
         SELECT workLog

@@ -41,6 +41,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/auth/login",
+                                "/auth/password-reset/request",
+                                "/auth/password-reset/confirm",
                                 "/users",
                                 "/public/invitations/accept",
                                 "/public/invitations/decline"
@@ -60,6 +62,11 @@ public class SecurityConfig {
                         ).authenticated()
 
                         .requestMatchers(
+                                HttpMethod.POST,
+                                "/public/join-links/register"
+                        ).permitAll()
+
+                        .requestMatchers(
                                 HttpMethod.GET,
                                 "/public/invitations",
                                 "/public/invitations/**",
@@ -76,7 +83,12 @@ public class SecurityConfig {
                                 HttpMethod.POST,
                                 "/invoices/drafts"
                         )
-                        .hasAnyAuthority("OWNER", "MANAGER")
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
+
+                        .requestMatchers(
+                                HttpMethod.PATCH,
+                                "/users/me/password"
+                        ).authenticated()
 
                         .requestMatchers(
                                 HttpMethod.PATCH,
@@ -84,7 +96,7 @@ public class SecurityConfig {
                                 "/invoices/*/paid",
                                 "/invoices/*/cancel"
                         )
-                        .hasAnyAuthority("OWNER", "MANAGER")
+                        .hasAnyAuthority("OWNER", "ADMIN", "MANAGER")
 
                         .requestMatchers(
                                 HttpMethod.POST,
@@ -212,13 +224,17 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/worker-profiles/me"
                         )
-                        .hasAuthority("WORKER")
+                        .hasAnyAuthority(
+                                "OWNER", "ADMIN", "MANAGER", "FINANCE", "WORKER"
+                        )
 
                         .requestMatchers(
                                 HttpMethod.PUT,
                                 "/worker-profiles/me"
                         )
-                        .hasAuthority("WORKER")
+                        .hasAnyAuthority(
+                                "OWNER", "ADMIN", "MANAGER", "FINANCE", "WORKER"
+                        )
 
                         .requestMatchers(
                                 "/companies/*/workers/**",

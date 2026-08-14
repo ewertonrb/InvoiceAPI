@@ -43,4 +43,13 @@ src/main/resources/application-local.properties
 target/
 .idea/
 *.iml
+
+
+target
+.git
+.idea
+.env
+.env.*
 *.log
+README.md
+HELP.md

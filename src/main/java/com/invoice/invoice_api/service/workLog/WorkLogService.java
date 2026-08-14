@@ -102,8 +102,11 @@ public class WorkLogService {
                 request.workDate()
         );
 
-        workLogValidator.validateNoActiveDuplicate(workLogRepository.existsByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNot(
-                workerProfile.getId(), projectPosition.getId(), request.workDate(), WorkLogStatus.CANCELLED));
+        workLogValidator.validateNoActiveDuplicate(
+                workLogRepository.findAllByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNot(
+                        workerProfile.getId(), projectPosition.getId(), request.workDate(), WorkLogStatus.CANCELLED),
+                request.workTime()
+        );
 
         WorkLog workLog = new WorkLog();
 
@@ -362,8 +365,11 @@ public class WorkLogService {
                 request.workDate()
         );
 
-        workLogValidator.validateNoActiveDuplicate(workLogRepository.existsActiveDuplicateExceptId(
-                workerProfile.getId(), projectPosition.getId(), request.workDate(), WorkLogStatus.CANCELLED, id));
+        workLogValidator.validateNoActiveDuplicate(
+                workLogRepository.findAllByWorkerProfileIdAndProjectPositionIdAndWorkDateAndStatusNotAndIdNot(
+                        workerProfile.getId(), projectPosition.getId(), request.workDate(), WorkLogStatus.CANCELLED, id),
+                request.workTime()
+        );
 
         workLogRequestMapper.apply(
                 workLog,
@@ -408,10 +414,6 @@ public class WorkLogService {
 
         workLogValidator.validateCanBeApproved(
                 workLog
-        );
-
-        workLogValidator.validateWorkerCanUseWorkLogs(
-                workLog.getWorkerProfile()
         );
 
         workLogValidator.validateProjectPositionActive(

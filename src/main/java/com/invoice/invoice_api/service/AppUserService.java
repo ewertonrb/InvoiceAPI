@@ -4,6 +4,10 @@ import com.invoice.invoice_api.dto.appUser.AppUserPasswordRequestDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserRequestDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserResponseDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserUpdateRequestDTO;
+import com.invoice.invoice_api.dto.auth.ChangePasswordRequestDTO;
+import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
+import com.invoice.invoice_api.exception.BusinessException;
+import com.invoice.invoice_api.security.AuthenticatedUserService;
 import com.invoice.invoice_api.enums.UserStatus;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.InvalidOperationException;
@@ -23,13 +27,16 @@ public class AppUserService {
 
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuthenticatedUserService authenticatedUserService;
 
     public AppUserService(
             AppUserRepository appUserRepository,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            AuthenticatedUserService authenticatedUserService
     ) {
         this.appUserRepository = appUserRepository;
         this.passwordEncoder = passwordEncoder;
+        this.authenticatedUserService = authenticatedUserService;
     }
 
     @Transactional
@@ -117,12 +124,30 @@ public class AppUserService {
             Long id,
             AppUserPasswordRequestDTO request
     ) {
+        if (!authenticatedUserService.getCurrentUserId().equals(id)) {
+            throw new AccessDeniedBusinessException("Users can only change their own password.");
+        }
         AppUser appUser = findNonDeletedEntityById(id);
 
         appUser.setPassword(
                 passwordEncoder.encode(request.password())
         );
 
+        appUserRepository.save(appUser);
+    }
+
+    @Transactional
+    public void changeCurrentPassword(ChangePasswordRequestDTO request) {
+        if (!request.newPassword().equals(request.confirmPassword())) {
+            throw new BusinessException("Passwords must match.");
+        }
+
+        AppUser appUser = authenticatedUserService.getCurrentUser();
+        if (!passwordEncoder.matches(request.currentPassword(), appUser.getPassword())) {
+            throw new BusinessException("Current password is incorrect.");
+        }
+
+        appUser.setPassword(passwordEncoder.encode(request.newPassword()));
         appUserRepository.save(appUser);
     }
 

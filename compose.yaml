@@ -1,0 +1,66 @@
+services:
+
+  postgres:
+    image: postgres:17
+
+    container_name: invoice-postgres-local
+
+    env_file:
+      - .env.local
+
+    restart: unless-stopped
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - invoice_postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d invoice_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+    networks:
+      - invoice-network
+
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: invoice-api-local
+
+    env_file:
+      - .env.local
+
+    restart: unless-stopped
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+
+      DB_URL: jdbc:postgresql://postgres:5432/invoice_db
+      DB_USERNAME: postgres
+
+      EMAIL_NOTIFICATIONS_ENABLED: "false"
+
+    ports:
+      - "8080:8080"
+
+    networks:
+      - invoice-network
+
+
+volumes:
+  invoice_postgres_data:
+
+
+networks:
+  invoice-network:
+    driver: bridge

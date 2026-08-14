@@ -1,9 +1,9 @@
 package com.invoice.invoice_api.model.embeddable;
 
 import jakarta.persistence.Column;
-import jdk.jfr.Enabled;
+import jakarta.persistence.Embeddable;
 
-@Enabled
+@Embeddable
 public class BankDetails {
     @Column(name = "bank_name", length = 100)
     private String bankName;

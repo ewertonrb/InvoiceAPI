@@ -2,8 +2,6 @@
 -- PostgreSQL database dump
 --
 
-\restrict ZQdvbSWG6bMLaT1DQyQp368auqdXOPEax5StFFgaELDyquyv5diFE1Gdxkejdpc
-
 -- Dumped from database version 17.10 (Debian 17.10-1.pgdg13+1)
 -- Dumped by pg_dump version 17.10 (Debian 17.10-1.pgdg13+1)
 
@@ -823,5 +821,4 @@ ALTER TABLE ONLY public.worker_profiles
 -- PostgreSQL database dump complete
 --
 
-\unrestrict ZQdvbSWG6bMLaT1DQyQp368auqdXOPEax5StFFgaELDyquyv5diFE1Gdxkejdpc
 

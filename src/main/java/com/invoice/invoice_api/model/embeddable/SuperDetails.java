@@ -1,7 +1,9 @@
 package com.invoice.invoice_api.model.embeddable;
 
 import jakarta.persistence.Column;
+import jakarta.persistence.Embeddable;
 
+@Embeddable
 public class SuperDetails {
     @Column(name = "super_fund_name", length = 150)
     private String fundName;

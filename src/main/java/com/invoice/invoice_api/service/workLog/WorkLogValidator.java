@@ -1,10 +1,12 @@
 package com.invoice.invoice_api.service.workLog;
 
 import com.invoice.invoice_api.dto.workLog.WorkLogRequestDTO;
+import com.invoice.invoice_api.dto.workLog.WorkLogTimeRequestDTO;
 import com.invoice.invoice_api.enums.WorkLogStatus;
 import com.invoice.invoice_api.exception.BusinessException;
 import com.invoice.invoice_api.model.ProjectPosition;
 import com.invoice.invoice_api.model.WorkLog;
+import com.invoice.invoice_api.model.embeddable.workLog.WorkLogTime;
 import com.invoice.invoice_api.model.WorkerProfile;
 import com.invoice.invoice_api.repository.ProjectRoleRateRepository;
 import org.springframework.stereotype.Component;
@@ -12,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 
 @Component
 public class WorkLogValidator {
@@ -102,8 +105,62 @@ public class WorkLogValidator {
         }
     }
 
-    public void validateNoActiveDuplicate(boolean duplicate) {
-        if (duplicate) throw new BusinessException("A work log already exists for this worker, project position, and date.");
+    public void validateNoActiveDuplicate(
+            List<WorkLog> existingWorkLogs,
+            WorkLogTimeRequestDTO requestedTime
+    ) {
+        if (existingWorkLogs == null || existingWorkLogs.isEmpty()) {
+            return;
+        }
+
+        if (!hasCompleteTime(requestedTime)) {
+            throw overlappingWorkLogException();
+        }
+
+        for (WorkLog existingWorkLog : existingWorkLogs) {
+            if (!hasCompleteTime(existingWorkLog.getWorkTime())
+                    || overlaps(existingWorkLog.getWorkTime(), requestedTime)) {
+                throw overlappingWorkLogException();
+            }
+        }
+    }
+
+    private boolean hasCompleteTime(WorkLogTimeRequestDTO time) {
+        return time != null && time.startTime() != null && time.finishTime() != null;
+    }
+
+    private boolean hasCompleteTime(WorkLogTime time) {
+        return time != null && time.hasStartAndFinishTime();
+    }
+
+    private boolean overlaps(WorkLogTime existing, WorkLogTimeRequestDTO requested) {
+        return intervals(existing.getStartTime(), existing.getFinishTime())
+                .stream()
+                .anyMatch(existingInterval -> intervals(requested.startTime(), requested.finishTime())
+                        .stream()
+                        .anyMatch(requestedInterval -> existingInterval.overlaps(requestedInterval)));
+    }
+
+    private List<Interval> intervals(LocalTime start, LocalTime finish) {
+        int startMinute = start.getHour() * 60 + start.getMinute();
+        int finishMinute = finish.getHour() * 60 + finish.getMinute();
+        if (finishMinute > startMinute) {
+            return List.of(new Interval(startMinute, finishMinute));
+        }
+        if (finishMinute < startMinute) {
+            return List.of(new Interval(startMinute, 24 * 60), new Interval(0, finishMinute));
+        }
+        return List.of();
+    }
+
+    private BusinessException overlappingWorkLogException() {
+        return new BusinessException("A work log already exists for this worker, project position, and overlapping time.");
+    }
+
+    private record Interval(int start, int finish) {
+        private boolean overlaps(Interval other) {
+            return start < other.finish && other.start < finish;
+        }
     }
 
     public void validateCanBeApproved(

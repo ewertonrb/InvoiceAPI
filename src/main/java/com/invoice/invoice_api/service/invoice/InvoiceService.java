@@ -4,6 +4,7 @@ import com.invoice.invoice_api.dto.invoice.InvoiceResponseDTO;
 import com.invoice.invoice_api.dto.invoice.InvoiceSummaryResponseDTO;
 import com.invoice.invoice_api.dto.invoice.IssueInvoiceRequestDTO;
 import com.invoice.invoice_api.enums.InvoiceStatus;
+import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
 import com.invoice.invoice_api.mapper.InvoiceMapper;
 import com.invoice.invoice_api.model.Invoice;
@@ -12,6 +13,7 @@ import com.invoice.invoice_api.model.WorkLog;
 import com.invoice.invoice_api.repository.InvoiceRepository;
 import com.invoice.invoice_api.repository.WorkLogRepository;
 import com.invoice.invoice_api.security.CompanyContext;
+import com.invoice.invoice_api.security.AuthenticatedUserService;
 import com.invoice.invoice_api.service.workLog.WorkLogRules;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,17 +27,20 @@ public class InvoiceService {
     private final WorkLogRepository workLogRepository;
     private final CompanyContext companyContext;
     private final InvoiceValidator invoiceValidator;
+    private final AuthenticatedUserService authenticatedUserService;
 
     public InvoiceService(
             InvoiceRepository invoiceRepository,
             WorkLogRepository workLogRepository,
             CompanyContext companyContext,
-            InvoiceValidator invoiceValidator
+            InvoiceValidator invoiceValidator,
+            AuthenticatedUserService authenticatedUserService
     ) {
         this.invoiceRepository = invoiceRepository;
         this.workLogRepository = workLogRepository;
         this.companyContext = companyContext;
         this.invoiceValidator = invoiceValidator;
+        this.authenticatedUserService = authenticatedUserService;
     }
 
     /*
@@ -62,7 +67,10 @@ public class InvoiceService {
 
         List<Invoice> invoices;
 
-        if (status == null) {
+        if (companyContext.getRole() == CompanyRole.WORKER) {
+            Long userId = authenticatedUserService.getCurrentUserId();
+            invoices = invoiceRepository.findAllByWorkerProfile_AppUser_IdAndCompanyIdOrderByCreatedAtDesc(userId, companyId);
+        } else if (status == null) {
             invoices =
                     invoiceRepository.findAllByCompanyIdOrderByCreatedAtDesc(companyId);
         } else {
@@ -119,7 +127,10 @@ public class InvoiceService {
 
     private Invoice findInvoiceWithItems(Long invoiceId, Long companyId) {
 
-        return invoiceRepository.findByIdAndCompanyIdWithItems(invoiceId, companyId)
+        var invoice = companyContext.getRole() == CompanyRole.WORKER
+                ? invoiceRepository.findByIdAndWorkerAppUserIdAndCompanyIdWithItems(invoiceId, authenticatedUserService.getCurrentUserId(), companyId)
+                : invoiceRepository.findByIdAndCompanyIdWithItems(invoiceId, companyId);
+        return invoice
                 .orElseThrow(() ->
                         new ResourceNotFoundException(
                                 "Invoice not found with ID: "

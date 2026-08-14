@@ -4,6 +4,7 @@ import com.invoice.invoice_api.dto.appUser.AppUserPasswordRequestDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserRequestDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserResponseDTO;
 import com.invoice.invoice_api.dto.appUser.AppUserUpdateRequestDTO;
+import com.invoice.invoice_api.dto.auth.ChangePasswordRequestDTO;
 import com.invoice.invoice_api.service.AppUserService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -67,6 +68,14 @@ public class AppUserController {
     ) {
         appUserService.updatePassword(id, request);
 
+        return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/me/password")
+    public ResponseEntity<Void> changeCurrentPassword(
+            @Valid @RequestBody ChangePasswordRequestDTO request
+    ) {
+        appUserService.changeCurrentPassword(request);
         return ResponseEntity.noContent().build();
     }
 

@@ -308,6 +308,41 @@ public class CompanyJoinLinkService {
             );
         }
 
+        @Transactional
+        public AcceptCompanyJoinLinkResponseDTO registerAndAccept(
+                RegisterPublicJoinLinkRequestDTO request
+        ) {
+            String normalizedEmail = normalizeEmail(request.email());
+            if (appUserRepository.findByEmailIgnoreCase(normalizedEmail).isPresent()) {
+                throw new DuplicateResourceException("An account already exists with this email. Sign in and open the link again.");
+            }
+
+            CompanyJoinLink joinLink = findByRawToken(request.token());
+            refreshAvailabilityStatus(joinLink);
+            validateJoinLinkCanBeUsed(joinLink);
+
+            AppUser appUser = new AppUser();
+            appUser.setName(request.name().trim());
+            appUser.setSurname(request.surname().trim());
+            appUser.setEmail(normalizedEmail);
+            appUser.setPassword(passwordEncoder.encode(request.password()));
+            appUser.setStatus(UserStatus.ACTIVE);
+            AppUser savedUser = appUserRepository.save(appUser);
+
+            CompanyMembership membership = activateOrCreateMembership(joinLink, savedUser);
+            createWorkerProfileIfNecessary(savedUser);
+            joinLink.registerUse();
+            if (joinLink.hasReachedUsageLimit()) joinLink.setStatus(JoinLinkStatus.EXPIRED);
+            CompanyJoinLink savedJoinLink = joinLinkRepository.save(joinLink);
+
+            return new AcceptCompanyJoinLinkResponseDTO(
+                    savedUser.getId(), savedUser.getName(), savedUser.getSurname(), savedUser.getEmail(),
+                    joinLink.getCompany().getId(), joinLink.getCompany().getName(), membership.getId(),
+                    membership.getRole(), membership.getStatus(), calculateRemainingUses(savedJoinLink), true,
+                    "COMPLETE_WORKER_PROFILE"
+            );
+        }
+
         private void validateAuthenticatedUser(AppUser appUser) {
             if (appUser.getStatus() != UserStatus.ACTIVE) {
                 throw new InvalidOperationException(

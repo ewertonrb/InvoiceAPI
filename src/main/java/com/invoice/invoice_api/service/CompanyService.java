@@ -5,10 +5,9 @@ import com.invoice.invoice_api.dto.company.CompanyResponseDTO;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
-import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.enums.MembershipStatus;
+import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.mapper.CompanyMapper;
-import com.invoice.invoice_api.model.AppUser;
 import com.invoice.invoice_api.model.Company;
 import com.invoice.invoice_api.model.CompanyMembership;
 import com.invoice.invoice_api.repository.CompanyMembershipRepository;
@@ -18,7 +17,6 @@ import com.invoice.invoice_api.security.CompanyContext;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -39,38 +37,6 @@ public class CompanyService {
         this.companyMembershipRepository = companyMembershipRepository;
         this.authenticatedUserService = authenticatedUserService;
         this.companyContext = companyContext;
-    }
-
-    @Transactional
-    public CompanyResponseDTO create(CompanyRequestDTO request) {
-
-        if (companyRepository.existsByAbn(request.abn())) {
-            throw new DuplicateResourceException("Company ABN already exists.");
-        }
-        if (companyRepository.existsByEmail(request.email())) {
-            throw new DuplicateResourceException("Company email already exists.");
-        }
-
-        Company company = CompanyMapper.toEntity(request);
-
-        company.setContractorInvoiceGstEnabled(
-                request.contractorInvoiceGstEnabled() == null
-                        ? false
-                        : request.contractorInvoiceGstEnabled()
-        );
-
-        Company savedCompany = companyRepository.save(company);
-
-        AppUser currentUser = authenticatedUserService.getCurrentUser();
-        CompanyMembership ownerMembership = new CompanyMembership();
-        ownerMembership.setAppUser(currentUser);
-        ownerMembership.setCompany(savedCompany);
-        ownerMembership.setRole(CompanyRole.OWNER);
-        ownerMembership.setStatus(MembershipStatus.ACTIVE);
-        ownerMembership.setAcceptedAt(LocalDateTime.now());
-        companyMembershipRepository.save(ownerMembership);
-
-        return CompanyMapper.toResponseDTO(savedCompany);
     }
 
     @Transactional(readOnly = true)
@@ -99,6 +65,11 @@ public class CompanyService {
     @Transactional
     public CompanyResponseDTO update(Long id, CompanyRequestDTO request) {
         requireSelectedCompanyManager(id);
+        if (request.active() != null && companyContext.getRole() != CompanyRole.ADMIN) {
+            throw new AccessDeniedBusinessException(
+                    "Only company administrators can change the company active status"
+            );
+        }
         Company company = getAccessibleCompany(id);
 
         if (!company.getAbn().equalsIgnoreCase(request.abn())
@@ -125,7 +96,7 @@ public class CompanyService {
     }
     @Transactional
     public void delete(Long id){
-        requireSelectedCompanyManager(id);
+        requireSelectedCompanyAdmin(id);
         Company company = getAccessibleCompany(id);
         company.setActive(false);
         companyRepository.save(company);
@@ -163,6 +134,20 @@ public class CompanyService {
         if (role != CompanyRole.OWNER && role != CompanyRole.ADMIN) {
             throw new AccessDeniedBusinessException(
                     "Only company owners and administrators can manage the company"
+            );
+        }
+    }
+
+    private void requireSelectedCompanyAdmin(Long companyId) {
+        if (!companyId.equals(companyContext.getCompanyId())) {
+            throw new AccessDeniedBusinessException(
+                    "The selected company does not match the requested company"
+            );
+        }
+
+        if (companyContext.getRole() != CompanyRole.ADMIN) {
+            throw new AccessDeniedBusinessException(
+                    "Only company administrators can change the company active status"
             );
         }
     }

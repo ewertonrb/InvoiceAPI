@@ -61,7 +61,7 @@ public class WorkerProfileService {
      * ============================================================
      */
 
-    @Transactional(readOnly = true)
+    @Transactional
     public WorkerProfileResponseDTO findCurrentProfile() {
         validateCurrentUserCanSelfManageProfile();
 
@@ -346,11 +346,9 @@ public class WorkerProfileService {
         AppUser currentUser =
                 authenticatedUserService.getCurrentUser();
 
-        return workerProfileRepository.findByAppUserId(currentUser.getId()).orElseGet(() -> {
-            WorkerProfile profile = new WorkerProfile();
-            profile.setAppUser(currentUser);
-            return workerProfileRepository.save(profile);
-        });
+        workerProfileRepository.ensureForAppUser(currentUser.getId());
+        return workerProfileRepository.findByAppUserId(currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Personal profile could not be created."));
     }
 
     private WorkerProfile findEntityById(

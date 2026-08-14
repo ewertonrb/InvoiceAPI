@@ -37,7 +37,8 @@ public class CurrentUserService {
                 appUser.getName(),
                 appUser.getSurname(),
                 appUser.getEmail(),
-                appUser.getStatus()
+                appUser.getStatus(),
+                appUser.getSystemRole()
         );
     }
 

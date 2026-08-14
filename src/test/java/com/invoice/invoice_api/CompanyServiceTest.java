@@ -1,8 +1,8 @@
 package com.invoice.invoice_api;
 
 import com.invoice.invoice_api.dto.company.CompanyRequestDTO;
-import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.enums.MembershipStatus;
+import com.invoice.invoice_api.enums.CompanyRole;
 import com.invoice.invoice_api.exception.AccessDeniedBusinessException;
 import com.invoice.invoice_api.exception.DuplicateResourceException;
 import com.invoice.invoice_api.exception.ResourceNotFoundException;
@@ -27,7 +27,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -53,57 +52,6 @@ class CompanyServiceTest {
                 authenticatedUserService,
                 companyContext
         );
-    }
-
-    @Test
-    void createPersistsActiveOwnerMembershipForCurrentUser() {
-        AppUser user = user(7L);
-        Company saved = company(11L, true);
-        when(authenticatedUserService.getCurrentUser()).thenReturn(user);
-        when(companyRepository.save(any(Company.class))).thenReturn(saved);
-
-        service.create(request("123", "owner@example.test"));
-
-        ArgumentCaptor<CompanyMembership> captor =
-                ArgumentCaptor.forClass(CompanyMembership.class);
-        verify(membershipRepository).save(captor.capture());
-        CompanyMembership membership = captor.getValue();
-        assertEquals(user, membership.getAppUser());
-        assertEquals(saved, membership.getCompany());
-        assertEquals(CompanyRole.OWNER, membership.getRole());
-        assertEquals(MembershipStatus.ACTIVE, membership.getStatus());
-        assertNotNull(membership.getAcceptedAt());
-    }
-
-    @Test
-    void createIsTransactionalSoCompanyAndMembershipAreAtomic() throws Exception {
-        Transactional transactional = CompanyService.class
-                .getMethod("create", CompanyRequestDTO.class)
-                .getAnnotation(Transactional.class);
-
-        assertNotNull(transactional);
-    }
-
-    @Test
-    void duplicateAbnStopsBeforeCompanyOrMembershipIsSaved() {
-        when(companyRepository.existsByAbn("123")).thenReturn(true);
-
-        assertThrows(DuplicateResourceException.class,
-                () -> service.create(request("123", "owner@example.test")));
-
-        verify(companyRepository, never()).save(any());
-        verify(membershipRepository, never()).save(any());
-    }
-
-    @Test
-    void duplicateEmailStopsBeforeCompanyOrMembershipIsSaved() {
-        when(companyRepository.existsByEmail("owner@example.test")).thenReturn(true);
-
-        assertThrows(DuplicateResourceException.class,
-                () -> service.create(request("123", "owner@example.test")));
-
-        verify(companyRepository, never()).save(any());
-        verify(membershipRepository, never()).save(any());
     }
 
     @Test
@@ -160,19 +108,13 @@ class CompanyServiceTest {
     }
 
     @Test
-    void ownerCanDeactivateAccessibleSelectedCompany() {
-        Company company = company(11L, true);
+    void ownerCannotDeactivateCompany() {
         when(companyContext.getCompanyId()).thenReturn(11L);
         when(companyContext.getRole()).thenReturn(CompanyRole.OWNER);
-        when(authenticatedUserService.getCurrentUserId()).thenReturn(7L);
-        when(membershipRepository.findByAppUserIdAndCompanyIdAndStatus(
-                7L, 11L, MembershipStatus.ACTIVE))
-                .thenReturn(Optional.of(membership(company)));
 
-        service.delete(11L);
+        assertThrows(AccessDeniedBusinessException.class, () -> service.delete(11L));
 
-        assertFalse(company.getActive());
-        verify(companyRepository).save(company);
+        verify(companyRepository, never()).save(any());
     }
 
     @Test

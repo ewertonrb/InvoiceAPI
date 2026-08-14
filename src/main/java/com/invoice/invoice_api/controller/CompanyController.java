@@ -1,7 +1,7 @@
 package com.invoice.invoice_api.controller;
 
-import com.invoice.invoice_api.dto.company.CompanyRequestDTO;
 import com.invoice.invoice_api.dto.company.CompanyResponseDTO;
+import com.invoice.invoice_api.dto.company.CompanyRequestDTO;
 import com.invoice.invoice_api.service.CompanyService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -16,11 +16,6 @@ public class CompanyController {
 
     public CompanyController(CompanyService companyService) {
         this.companyService = companyService;
-    }
-
-    @PostMapping
-    public CompanyResponseDTO create(@Valid @RequestBody CompanyRequestDTO request) {
-        return companyService.create(request);
     }
 
     @GetMapping
