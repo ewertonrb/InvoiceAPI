@@ -35,19 +35,22 @@ public class PlatformCompanyProvisioningService {
     private final CompanyMembershipRepository membershipRepository;
     private final AuthenticatedUserService authenticatedUserService;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationEmailService notificationEmailService;
 
     public PlatformCompanyProvisioningService(
             CompanyRepository companyRepository,
             AppUserRepository appUserRepository,
             CompanyMembershipRepository membershipRepository,
             AuthenticatedUserService authenticatedUserService,
-            PasswordEncoder passwordEncoder
+            PasswordEncoder passwordEncoder,
+            NotificationEmailService notificationEmailService
     ) {
         this.companyRepository = companyRepository;
         this.appUserRepository = appUserRepository;
         this.membershipRepository = membershipRepository;
         this.authenticatedUserService = authenticatedUserService;
         this.passwordEncoder = passwordEncoder;
+        this.notificationEmailService = notificationEmailService;
     }
 
     @Transactional
@@ -67,8 +70,9 @@ public class PlatformCompanyProvisioningService {
         String ownerEmail = request.owner().email().trim().toLowerCase();
         AppUser owner = appUserRepository.findByEmailIgnoreCase(ownerEmail).orElse(null);
         boolean ownerCreated = owner == null;
+        String temporaryPassword = null;
         if (ownerCreated) {
-            String temporaryPassword = request.owner().temporaryPassword();
+            temporaryPassword = request.owner().temporaryPassword();
             if (temporaryPassword == null || temporaryPassword.isBlank()) {
                 throw new InvalidOperationException("temporaryPassword is required when creating a new owner account.");
             }
@@ -88,6 +92,13 @@ public class PlatformCompanyProvisioningService {
         membership.setRejectedAt(null);
         membership.setSuspendedAt(null);
         CompanyMembership savedMembership = membershipRepository.save(membership);
+
+        notificationEmailService.sendOwnerSetupEmail(
+                owner.getEmail(),
+                owner.getFullName(),
+                savedCompany.getName(),
+                temporaryPassword
+        );
 
         return new PlatformCompanyProvisionResponseDTO(
                 CompanyMapper.toResponseDTO(savedCompany),

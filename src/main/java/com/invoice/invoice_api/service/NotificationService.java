@@ -43,9 +43,20 @@ public class NotificationService {
 
     @Transactional
     public void create(AppUser user, Company company, NotificationType type, String title, String message, Long shiftId) {
+        createNotification(user, company, type, title, message, shiftId, true);
+    }
+
+    @Transactional
+    public void createWithoutEmail(AppUser user, Company company, NotificationType type, String title, String message, Long shiftId) {
+        createNotification(user, company, type, title, message, shiftId, false);
+    }
+
+    private void createNotification(AppUser user, Company company, NotificationType type, String title, String message, Long shiftId, boolean sendEmail) {
         Notification notification = new Notification(); notification.setUser(user); notification.setCompany(company); notification.setType(type); notification.setTitle(title); notification.setMessage(message); notification.setRelatedShiftId(shiftId); notification.setTargetPath("/shifts");
         notifications.save(notification);
-        NotificationEmailOutbox email = new NotificationEmailOutbox(); email.setNotification(notification); email.setRecipient(user.getEmail()); email.setSubject(title); email.setBody(message + "\n\nOpen Invoice Platform: /shifts"); outbox.save(email);
+        if (sendEmail) {
+            NotificationEmailOutbox email = new NotificationEmailOutbox(); email.setNotification(notification); email.setRecipient(user.getEmail()); email.setSubject(title); email.setBody(message + "\n\nOpen Invoice Platform: /shifts"); outbox.save(email);
+        }
     }
 
     private void requireCompany(Long companyId) { if (!companyId.equals(context.getCompanyId())) throw new AccessDeniedBusinessException("The selected company does not match the request."); companies.findById(companyId).filter(c -> Boolean.TRUE.equals(c.getActive())).orElseThrow(() -> new ResourceNotFoundException("Company not found.")); }

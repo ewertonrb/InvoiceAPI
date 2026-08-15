@@ -15,6 +15,7 @@ import com.invoice.invoice_api.repository.CompanyMembershipRepository;
 import com.invoice.invoice_api.repository.CompanyRepository;
 import com.invoice.invoice_api.security.AuthenticatedUserService;
 import com.invoice.invoice_api.service.PlatformCompanyProvisioningService;
+import com.invoice.invoice_api.service.NotificationEmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,12 +38,13 @@ class PlatformCompanyProvisioningServiceTest {
     @Mock CompanyMembershipRepository memberships;
     @Mock AuthenticatedUserService authenticated;
     @Mock PasswordEncoder passwordEncoder;
+    @Mock NotificationEmailService notificationEmailService;
 
     private PlatformCompanyProvisioningService service;
 
     @BeforeEach
     void setUp() {
-        service = new PlatformCompanyProvisioningService(companies, users, memberships, authenticated, passwordEncoder);
+        service = new PlatformCompanyProvisioningService(companies, users, memberships, authenticated, passwordEncoder, notificationEmailService);
     }
 
     @Test
@@ -72,6 +74,7 @@ class PlatformCompanyProvisioningServiceTest {
         assertEquals(MembershipStatus.ACTIVE, captor.getValue().getStatus());
         assertEquals(30L, captor.getValue().getAppUser().getId());
         assertEquals(20L, captor.getValue().getCompany().getId());
+        verify(notificationEmailService).sendOwnerSetupEmail("owner@example.test", "Owner Person", "Pilot Co", "temporary-password");
     }
 
     @Test
@@ -100,6 +103,7 @@ class PlatformCompanyProvisioningServiceTest {
         verify(users, never()).save(any(AppUser.class));
         assertEquals(CompanyRole.OWNER, existing.getRole());
         assertEquals(MembershipStatus.ACTIVE, existing.getStatus());
+        verify(notificationEmailService).sendOwnerSetupEmail("owner@example.test", "", "Pilot Co", null);
     }
 
     @Test

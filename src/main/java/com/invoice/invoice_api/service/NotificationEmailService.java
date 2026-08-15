@@ -63,6 +63,36 @@ public class NotificationEmailService {
         }
     }
 
+    public void sendOwnerSetupEmail(String recipient, String name, String companyName, String temporaryPassword) {
+        if (!properties.isEmailEnabled()) return;
+
+        JavaMailSender mailSender = mailSenders.getIfAvailable();
+        if (mailSender == null) {
+            throw new IllegalStateException("Email notifications are enabled but no JavaMailSender is configured.");
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            helper.setTo(recipient);
+            helper.setSubject("Your Invoice Platform owner account is ready");
+            String credentials = temporaryPassword == null || temporaryPassword.isBlank()
+                    ? "Your existing account has been granted owner access to this company."
+                    : "Your temporary password is: " + temporaryPassword;
+            helper.setText(
+                    "Hello " + name + ",\n\n"
+                            + "The company " + companyName + " has been created and your Invoice Platform owner account is ready.\n\n"
+                            + credentials + "\n\n"
+                            + "Please sign in and change your temporary password if one was provided.",
+                    false
+            );
+            if (properties.getFrom() != null && !properties.getFrom().isBlank()) helper.setFrom(properties.getFrom());
+            mailSender.send(message);
+        } catch (MessagingException error) {
+            throw new IllegalStateException("Could not create owner setup email.", error);
+        }
+    }
+
     private void send(NotificationEmailOutbox item, JavaMailSender mailSender) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

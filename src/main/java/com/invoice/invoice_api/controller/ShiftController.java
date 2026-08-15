@@ -56,6 +56,11 @@ public class ShiftController {
         return ResponseEntity.ok(shifts.decline(companyId, shiftId, request));
     }
 
+    @PostMapping("/{shiftId}/assignments/{assignmentId}/cancel")
+    public ResponseEntity<ShiftResponseDTO> cancelAssignment(@PathVariable Long companyId, @PathVariable Long shiftId, @PathVariable Long assignmentId) {
+        return ResponseEntity.ok(shifts.cancelAssignment(companyId, shiftId, assignmentId));
+    }
+
     @DeleteMapping("/{shiftId}")
     public ResponseEntity<Void> cancel(@PathVariable Long companyId, @PathVariable Long shiftId) {
         shifts.cancel(companyId, shiftId);
