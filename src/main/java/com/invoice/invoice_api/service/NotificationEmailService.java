@@ -33,6 +33,36 @@ public class NotificationEmailService {
         for (NotificationEmailOutbox item : outbox.findByStatusAndNextAttemptAtLessThanEqualOrderByCreatedAtAsc(NotificationDeliveryStatus.PENDING, LocalDateTime.now(), PageRequest.of(0, 25))) send(item, mailSender);
     }
 
+    public void sendInvitationEmail(String recipient, String name, String companyName, String invitationUrl, long expirationDays) {
+        if (!properties.isEmailEnabled()) return;
+
+        JavaMailSender mailSender = mailSenders.getIfAvailable();
+        if (mailSender == null) {
+            throw new IllegalStateException("Email notifications are enabled but no JavaMailSender is configured.");
+        }
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, false, "UTF-8");
+            helper.setTo(recipient);
+            helper.setSubject("You have been invited to Invoice Platform");
+            helper.setText(
+                    "Hello " + name + ",\n\n"
+                            + "You have been invited to join " + companyName + " on Invoice Platform.\n\n"
+                            + "Accept your invitation using this link:\n"
+                            + invitationUrl + "\n\n"
+                            + "This invitation expires in " + expirationDays + " days.",
+                    false
+            );
+            if (properties.getFrom() != null && !properties.getFrom().isBlank()) {
+                helper.setFrom(properties.getFrom());
+            }
+            mailSender.send(message);
+        } catch (MessagingException error) {
+            throw new IllegalStateException("Could not create invitation email.", error);
+        }
+    }
+
     private void send(NotificationEmailOutbox item, JavaMailSender mailSender) {
         try {
             MimeMessage message = mailSender.createMimeMessage();

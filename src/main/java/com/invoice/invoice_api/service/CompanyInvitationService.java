@@ -32,6 +32,7 @@ public class CompanyInvitationService {
     private final WorkerProfileRepository workerProfileRepository;
     private final PasswordEncoder passwordEncoder;
     private final CompanyContext companyContext;
+    private final NotificationEmailService notificationEmailService;
 
     public CompanyInvitationService(
             CompanyInvitationRepository invitationRepository,
@@ -43,7 +44,8 @@ public class CompanyInvitationService {
             SecureTokenService secureTokenService,
             InvitationProperties properties,
             AuthenticatedUserService authenticatedUserService,
-            CompanyContext companyContext
+            CompanyContext companyContext,
+            NotificationEmailService notificationEmailService
     ) {
         this.invitationRepository = invitationRepository;
         this.companyRepository = companyRepository;
@@ -55,6 +57,7 @@ public class CompanyInvitationService {
         this.properties = properties;
         this.authenticatedUserService = authenticatedUserService;
         this.companyContext = companyContext;
+        this.notificationEmailService = notificationEmailService;
     }
 
     /*
@@ -137,6 +140,14 @@ public class CompanyInvitationService {
 
         String invitationUrl =
                 buildInvitationUrl(rawToken);
+
+        notificationEmailService.sendInvitationEmail(
+                savedInvitation.getEmail(),
+                savedInvitation.getName(),
+                company.getName(),
+                invitationUrl,
+                properties.getInvitation().getExpirationDays()
+        );
 
         return new CompanyInvitationCreatedResponseDTO(
                 CompanyInvitationMapper.toResponseDTO(

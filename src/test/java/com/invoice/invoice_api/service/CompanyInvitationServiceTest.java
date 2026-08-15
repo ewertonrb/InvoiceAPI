@@ -22,8 +22,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class CompanyInvitationServiceTest {
     @Mock CompanyInvitationRepository invitations; @Mock CompanyRepository companies; @Mock AppUserRepository users; @Mock WorkerProfileRepository profiles; @Mock PasswordEncoder passwords; @Mock CompanyMembershipRepository memberships; @Mock SecureTokenService tokens; @Mock AuthenticatedUserService authenticated; @Mock CompanyContext context;
+    @Mock NotificationEmailService notificationEmailService;
     CompanyInvitationService service;
-    @BeforeEach void setup() { service = new CompanyInvitationService(invitations, companies, users, profiles, passwords, memberships, tokens, new InvitationProperties(), authenticated, context); }
+    @BeforeEach void setup() { service = new CompanyInvitationService(invitations, companies, users, profiles, passwords, memberships, tokens, new InvitationProperties(), authenticated, context, notificationEmailService); }
 
     @Test void declineUsesTokenHashPessimisticLock() {
         CompanyInvitation invitation = pendingInvitation(); stubLockedLookup("raw-token", "hash", invitation);
