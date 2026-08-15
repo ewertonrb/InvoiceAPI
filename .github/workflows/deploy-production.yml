@@ -96,7 +96,7 @@ jobs:
           ssh -i ~/.ssh/invoice_api_deploy "$PROD_USER@$PROD_HOST" "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'EOF'
           set -euo pipefail
 
-          cd "$HOME/InvoiceAPI"
+          cd /opt/invoice-api/InvoiceAPI
 
           echo "Fetching production commit..."
           git fetch origin main
