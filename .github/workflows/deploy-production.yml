@@ -1,0 +1,146 @@
+name: InvoiceAPI CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: invoice-api-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Test and build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: invoice_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d invoice_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://localhost:5432/invoice_ci
+      DB_USERNAME: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRET: ci-only-secret-key-that-is-not-used-in-production-2026
+      FRONTEND_BASE_URL: http://localhost:3000
+      EMAIL_NOTIFICATIONS_ENABLED: "false"
+      MAIL_HOST: ""
+      MAIL_USERNAME: ""
+      MAIL_PASSWORD: ""
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Make Maven wrapper executable
+        run: chmod +x mvnw
+
+      - name: Run tests and package
+        run: ./mvnw -B clean verify
+
+      - name: Validate Docker image build
+        run: docker build -t invoice-api:ci .
+
+  deploy:
+    name: Deploy to Lightsail
+    needs: ci
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Configure SSH
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$PROD_SSH_KEY" > ~/.ssh/invoice_api_deploy
+          chmod 600 ~/.ssh/invoice_api_deploy
+          ssh-keyscan -H "$PROD_HOST" >> ~/.ssh/known_hosts
+
+      - name: Deploy application
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          DEPLOY_SHA: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/invoice_api_deploy "$PROD_USER@$PROD_HOST" "DEPLOY_SHA='$DEPLOY_SHA' bash -s" <<'EOF'
+          set -euo pipefail
+
+          cd "$HOME/InvoiceAPI"
+
+          echo "Fetching production commit..."
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+          if [ ! -f .env.prod ]; then
+            echo ".env.prod not found on production server"
+            exit 1
+          fi
+
+          echo "Building image invoice-api:$DEPLOY_SHA..."
+          docker build -t "invoice-api:$DEPLOY_SHA" .
+
+          echo "Replacing production container..."
+          docker stop invoice-api >/dev/null 2>&1 || true
+          docker rm invoice-api >/dev/null 2>&1 || true
+
+          docker run -d \
+            --name invoice-api \
+            --restart unless-stopped \
+            --env-file .env.prod \
+            -p 127.0.0.1:8080:8080 \
+            "invoice-api:$DEPLOY_SHA"
+
+          echo "Waiting for application startup..."
+          healthy=false
+          for attempt in $(seq 1 45); do
+            if curl -sS -o /dev/null http://127.0.0.1:8080; then
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$healthy" != "true" ]; then
+            echo "Application did not become reachable. Recent logs:"
+            docker logs --tail 150 invoice-api || true
+            exit 1
+          fi
+
+          echo "Production container is reachable."
+          docker image prune -f >/dev/null 2>&1 || true
+          EOF
+
+      - name: Verify public endpoint
+        run: curl --silent --show-error --output /dev/null https://api.digitae.com.au
